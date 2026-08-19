@@ -34,21 +34,13 @@ from core.safety import SafetyChecker
 from core.session_replay import SessionReplay
 from reporting.html_report import HTMLReportGenerator
 from recon.network_viz import NetworkVisualizer
+from app.terminal.ui import PenAIUI, console
 
 
 class PenAIRepl:
     """Interactive CLI like Claude Code. Type commands, AI executes."""
 
-    BANNER = """
-\033[91m███╗   ██╗███████╗██╗  ██╗██╗   ██╗███████╗
-\033[91m████╗  ██║██╔════╝╚██╗██╔╝██║   ██║██╔════╝
-\033[91m██╔██╗ ██║█████╗   ╚███╔╝ ██║   ██║███████╗
-\033[91m██║╚██╗██║██╔══╝   ██╔██╗ ██║   ██║╚════██║
-\033[91m██║ ╚████║███████╗██╔╝ ╚██╗╚██████╔╝███████║
-\033[91m╚═╝  ╚═══╝╚══════╝╚═╝   ╚═╝ ╚═════╝ ╚══════╝
-\033[0m  Autonomous Penetration Testing Agent v2.1
-  Type 'help' for commands. Ctrl+C to exit.
-"""
+    BANNER = None  # Using Rich UI banner instead
 
     def __init__(self, llm=None):
         self.executor = AutonomousExecutor(timeout=300)
@@ -78,7 +70,7 @@ class PenAIRepl:
 
     async def run(self):
         """Main REPL loop."""
-        print(self.BANNER)
+        PenAIUI.banner()
 
         # Auto-scan if target was set before run()
         if self.target:
@@ -190,100 +182,23 @@ class PenAIRepl:
         return "\033[91mpen-ai\033[0m > "
 
     def _cmd_help(self):
-        print("""
-\033[1m  COMMANDS:\033[0m
-
-  \033[96mRECON:\033[0m
-    scan <target>          - Scan target (hosts + services)
-    enum                   - Enumerate all discovered services
-    map                    - Show network visualization
-
-  \033[91mEXPLOIT:\033[0m
-    exploit                - Auto-exploit all found services
-    attack <host>:<port>   - Attack specific host:port
-    crack                  - Crack found hashes
-
-  \033[93mPOST-EXPLOIT:\033[0m
-    privesc                - Attempt privilege escalation
-    loot                   - Harvest credentials and sensitive data
-    pivot                  - Find and pivot to new networks
-    shell <type>           - Generate reverse shell (bash/python/php)
-
-  \033[92mINFO:\033[0m
-    dashboard              - Show engagement dashboard
-    state                  - Show current engagement state (alias)
-    suggest                - Get attack suggestions
-    report                 - Generate HTML + JSON report
-    creds                  - Show all discovered credentials
-
-  \033[95mSESSION:\033[0m
-    sessions               - List saved sessions
-    resume <session_id>    - Resume previous session
-    replay                 - List replayable sessions
-    replay <session_id>    - Show session details
-    set target <ip>        - Set target (auto-scans)
-
-  \033[93mTOOLS:\033[0m
-    install <tool>         - Install a tool
-    run <command>          - Run any command
-
-  \033[91mAUTO CHAINS:\033[0m
-    auto                   - Full auto: scan → enum → exploit → privesc → pivot → loot
-    auto-recon             - Auto recon chain
-    auto-exploit           - Auto exploit chain
-    auto-post              - Auto post-exploit chain
-
-  \033[90mOTHER:\033[0m
-    help                   - Show this help
-    exit / quit / q        - Exit (saves session)
-""")
+        PenAIUI.help()
 
     def _cmd_dashboard(self):
-        elapsed = datetime.now() - self.start_time
-        minutes = int(elapsed.total_seconds() / 60)
-        seconds = int(elapsed.total_seconds() % 60)
-
-        total_svcs = sum(len(v) for v in self.services.values())
-
-        print(f"""
-\033[1m{'='*60}
-{' '*20}ENGAGEMENT DASHBOARD
-{'='*60}\033[0m
-
-  \033[1mTARGET:\033[0m      {self.target or 'Not set'}
-  \033[1mSESSION:\033[0m     {self.session_id}
-  \033[1mDURATION:\033[0m    {minutes}m {seconds}s
-  \033[1mCOMMANDS:\033[0m    {len(self.commands_run)}
-
-  \033[1m{'─'*56}\033[0m
-  \033[92mHOSTS:\033[0m       {len(self.hosts)} discovered
-  \033[96mSERVICES:\033[0m    {total_svcs} open
-  \033[91mCREDENTIALS:\033[0m {len(self.credentials)} found
-  \033[95mACCESS:\033[0m      {self.access_map or 'None'}
-  \033[95mPIVOTS:\033[0m      {len(self.pivoted)} networks
-  \033[1m{'─'*56}\033[0m
-""")
-
-        if self.hosts:
-            print("  \033[1mHOSTS:\033[0m")
-            for h in self.hosts:
-                svcs = self.services.get(h, [])
-                svc_str = ", ".join(f"{s.get('port', '?')}/{s.get('service', '?')}" for s in svcs)
-                access = self.access_map.get(h, "")
-                access_str = f" [\033[92m{access}\033[0m]" if access else ""
-                print(f"    {h}{access_str}: {svc_str or 'no services found'}")
-
-        if self.credentials:
-            print("\n  \033[1mCREDENTIALS:\033[0m")
-            for c in self.credentials:
-                val = str(c.get("value", ""))[:60]
-                print(f"    [{c.get('type', '?')}] {val}")
-
-        print(f"{'='*60}")
+        PenAIUI.dashboard(
+            target=self.target,
+            session_id=self.session_id,
+            hosts=self.hosts,
+            services=self.services,
+            credentials=self.credentials,
+            access_map=self.access_map,
+            pivoted=self.pivoted,
+            commands_run=self.commands_run,
+            start_time=self.start_time,
+        )
 
     def _cmd_network_map(self):
-        print(NetworkVisualizer.visualize(self.hosts, self.services, self.access_map, self.pivoted))
-        print(NetworkVisualizer.visualize_services_table(self.services))
+        PenAIUI.network_map(self.hosts, self.services, self.access_map, self.pivoted)
 
     def _cmd_creds(self):
         """Show all credentials."""

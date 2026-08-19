@@ -1,187 +1,381 @@
-"""Terminal UI - Rich-based terminal interface for PEN-AI."""
+"""PEN-AI Professional CLI UI - Beautiful terminal interface using Rich."""
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.table import Table
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+from rich.columns import Columns
+from rich.text import Text
 from rich.layout import Layout
 from rich.live import Live
-from rich.text import Text
-from rich.markdown import Markdown
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from typing import Optional, Any
+from rich import box
+from datetime import datetime
 
 
-class TerminalUI:
-    """Rich-based terminal interface for PEN-AI."""
+console = Console()
 
-    def __init__(self):
-        self.console = Console()
-        self._live: Optional[Live] = None
 
-    def print_banner(self) -> None:
-        """Print the PEN-AI banner."""
-        banner = """
+class PenAIUI:
+    """Professional terminal UI for PEN-AI."""
+
+    # Color scheme
+    COLORS = {
+        "primary": "red",
+        "secondary": "cyan",
+        "success": "green",
+        "warning": "yellow",
+        "danger": "bold red",
+        "info": "blue",
+        "muted": "dim",
+        "accent": "magenta",
+    }
+
+    @staticmethod
+    def banner():
+        """Show the main banner."""
+        banner_text = """
 [bold red]
- ██████╗ ███████╗███╗   ██╗    ███████╗ ██████╗ █████╗ ███╗   ██╗
-██╔════╝ ██╔════╝████╗  ██║    ██╔════╝██╔════╝██╔══██╗████╗  ██║
-██║  ███╗█████╗  ██╔██╗ ██║    ███████╗██║     ███████║██╔██╗ ██║
-██║   ██║██╔══╝  ██║╚██╗██║    ╚════██║██║     ██╔══██║██║╚██╗██║
-╚██████╔╝███████╗██║ ╚████║    ███████║╚██████╗██║  ██║██║ ╚████║
- ╚═════╝ ╚══════╝╚═╝  ╚═══╝    ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝
-[/bold red]
-[dim]AI-Powered Adaptive Penetration Testing Operator[/dim]
-"""
-        self.console.print(banner)
+███╗   ██╗███████╗██╗  ██╗██╗   ██╗███████╗
+████╗  ██║██╔════╝╚██╗██╔╝██║   ██║██╔════╝
+██╔██╗ ██║█████╗   ╚███╔╝ ██║   ██║███████╗
+██║╚██╗██║██╔══╝   ██╔██╗ ██║   ██║╚════██║
+██║ ╚████║███████╗██╔╝ ╚██╗╚██████╔╝███████║
+╚═╝  ╚═══╝╚══════╝╚═╝   ╚═╝ ╚═════╝ ╚══════╝[/]
+[bold white]  Autonomous Penetration Testing Agent v2.2[/]
+[dim]  Type 'help' for commands. Ctrl+C to exit.[/]"""
 
-    def print_state(self, state: Any) -> None:
-        """Print current engagement state."""
-        table = Table(title="Engagement State", show_header=True, header_style="bold cyan")
-        table.add_column("Metric", style="dim")
-        table.add_column("Value", style="green")
+        console.print(Panel(
+            banner_text,
+            border_style="red",
+            padding=(0, 2),
+        ))
 
-        table.add_row("Hosts Discovered", str(state.hosts_discovered))
-        table.add_row("Services Found", str(state.services_discovered))
-        table.add_row("Vulnerabilities", str(state.vulnerabilities_found))
-        table.add_row("Credentials Found", str(state.credentials_found))
-        table.add_row("Objectives", f"{state.objectives_completed}/{len(state.objectives)}")
-        table.add_row("Current Access", state.current_access.value)
-        table.add_row("Pivot Depth", f"{state.pivot_depth}/{state.max_pivot_depth}")
+    @staticmethod
+    def header(title: str, subtitle: str = ""):
+        """Show a section header."""
+        if subtitle:
+            console.print(f"\n[bold {PenAIUI.COLORS['primary']}]{title}[/] [dim]{subtitle}[/]")
+        else:
+            console.print(f"\n[bold {PenAIUI.COLORS['primary']}]{title}[/]")
+        console.print(f"[dim]{'─' * 50}[/]")
 
-        self.console.print(table)
+    @staticmethod
+    def success(msg: str):
+        """Show success message."""
+        console.print(f"  [green]✓[/] {msg}")
 
-    def print_hypotheses(self, hypotheses: list) -> None:
-        """Print current hypotheses."""
-        if not hypotheses:
-            self.console.print("[dim]No active hypotheses[/dim]")
-            return
+    @staticmethod
+    def error(msg: str):
+        """Show error message."""
+        console.print(f"  [bold red]✗[/] {msg}")
 
-        table = Table(title="Active Hypotheses", show_header=True, header_style="bold yellow")
-        table.add_column("#", style="dim", width=3)
-        table.add_column("Hypothesis", max_width=50)
-        table.add_column("Confidence", width=10)
-        table.add_column("Category", width=12)
+    @staticmethod
+    def warning(msg: str):
+        """Show warning message."""
+        console.print(f"  [yellow]⚠[/] {msg}")
 
-        for i, h in enumerate(hypotheses[:5], 1):
-            confidence_color = {
-                "high": "green",
-                "medium": "yellow",
-                "low": "red",
-            }.get(h.confidence.value, "white")
+    @staticmethod
+    def info(msg: str):
+        """Show info message."""
+        console.print(f"  [blue]ℹ[/] {msg}")
 
-            table.add_row(
-                str(i),
-                h.statement,
-                f"[{confidence_color}]{h.confidence.value}[/{confidence_color}]",
-                h.category,
-            )
+    @staticmethod
+    def command(cmd: str):
+        """Show command being executed."""
+        console.print(f"  [dim]$[/] [cyan]{cmd}[/]")
 
-        self.console.print(table)
+    @staticmethod
+    def output_line(line: str):
+        """Show output line."""
+        console.print(f"    [dim]{line}[/]")
 
-    def print_actions(self, actions: list) -> None:
-        """Print candidate actions."""
-        if not actions:
-            self.console.print("[dim]No candidate actions[/dim]")
-            return
+    @staticmethod
+    def dashboard(target: str, session_id: str, hosts: list, services: dict,
+                  credentials: list, access_map: dict, pivoted: list,
+                  commands_run: list, start_time: datetime):
+        """Show professional dashboard."""
+        elapsed = datetime.now() - start_time
+        minutes = int(elapsed.total_seconds() / 60)
+        seconds = int(elapsed.total_seconds() % 60)
+        total_svcs = sum(len(v) for v in services.values())
 
-        table = Table(title="Candidate Actions", show_header=True, header_style="bold green")
-        table.add_column("Priority", width=8)
-        table.add_column("Action", max_width=40)
-        table.add_column("Score", width=6)
-        table.add_column("Tool", width=15)
+        # Stats table
+        stats_table = Table(show_header=False, box=None, padding=(0, 2))
+        stats_table.add_column("Key", style="bold white")
+        stats_table.add_column("Value", style="cyan")
 
-        for action in actions[:5]:
-            priority_color = {
-                "critical": "bold red",
-                "high": "red",
-                "medium": "yellow",
-                "low": "dim",
-            }.get(action.priority.value, "white")
+        stats_table.add_row("Target", target or "Not set")
+        stats_table.add_row("Session", session_id)
+        stats_table.add_row("Duration", f"{minutes}m {seconds}s")
+        stats_table.add_row("Commands", str(len(commands_run)))
 
-            table.add_row(
-                f"[{priority_color}]{action.priority.value}[/{priority_color}]",
-                action.description,
-                f"{action.score:.2f}",
-                action.tool_name or "-",
-            )
+        # Metrics
+        metrics = Table(show_header=False, box=None, padding=(0, 2))
+        metrics.add_column("Metric", style="bold")
+        metrics.add_column("Count", justify="right")
 
-        self.console.print(table)
+        metrics.add_row("[green]Hosts[/]", f"[green]{len(hosts)}[/]")
+        metrics.add_row("[cyan]Services[/]", f"[cyan]{total_svcs}[/]")
+        metrics.add_row("[red]Credentials[/]", f"[red]{len(credentials)}[/]")
+        metrics.add_row("[magenta]Access[/]", f"[magenta]{len(access_map)}[/]")
+        metrics.add_row("[yellow]Networks[/]", f"[yellow]{len(pivoted)}[/]")
 
-    def print_event(self, event: Any) -> None:
-        """Print an event."""
-        event_type_colors = {
-            "host_discovered": "green",
-            "service_found": "cyan",
-            "vulnerability_found": "yellow",
-            "exploit_success": "bold green",
-            "exploit_failed": "red",
-            "tool_called": "dim",
-            "tool_completed": "green",
-            "tool_failed": "red",
-        }
-
-        color = event_type_colors.get(event.event_type.value, "white")
-
-        self.console.print(
-            f"[dim]{event.timestamp.strftime('%H:%M:%S')}[/dim] "
-            f"[{color}]{event.event_type.value}[/{color}] "
-            f"{event.action}"
+        # Combine
+        layout = Layout()
+        layout.split_row(
+            Layout(stats_table, ratio=1),
+            Layout(metrics, ratio=1),
         )
 
-    def print_error(self, message: str) -> None:
-        """Print an error message."""
-        self.console.print(f"[bold red]ERROR:[/bold red] {message}")
+        console.print(Panel(
+            layout,
+            title="[bold red]📊 ENGAGEMENT DASHBOARD[/]",
+            border_style="red",
+            padding=(1, 2),
+        ))
 
-    def print_success(self, message: str) -> None:
-        """Print a success message."""
-        self.console.print(f"[bold green]SUCCESS:[/bold green] {message}")
-
-    def print_warning(self, message: str) -> None:
-        """Print a warning message."""
-        self.console.print(f"[bold yellow]WARNING:[/bold yellow] {message}")
-
-    def print_info(self, message: str) -> None:
-        """Print an info message."""
-        self.console.print(f"[bold blue]INFO:[/bold blue] {message}")
-
-    def print_cycle_header(self, cycle: int, max_cycles: int) -> None:
-        """Print cycle header."""
-        self.console.print()
-        self.console.print(
-            Panel(
-                f"[bold]Cycle {cycle}/{max_cycles}[/bold]",
-                style="cyan",
+        # Hosts table
+        if hosts:
+            hosts_table = Table(
+                title="[bold green]🖥️  HOSTS[/]",
+                box=box.ROUNDED,
+                show_lines=True,
+                border_style="green",
             )
+            hosts_table.add_column("IP", style="cyan", no_wrap=True)
+            hosts_table.add_column("Access", style="bold")
+            hosts_table.add_column("Services", style="dim")
+
+            for h in hosts:
+                svcs = services.get(h, [])
+                access = access_map.get(h, "")
+                access_style = "[green]" if access else "[dim]"
+                svc_str = ", ".join(f"{s.get('port', '?')}/{s.get('service', '?')}" for s in svcs[:5])
+                if len(svcs) > 5:
+                    svc_str += f" +{len(svcs)-5} more"
+
+                hosts_table.add_row(
+                    h,
+                    f"{access_style}{access or 'none'}[/]",
+                    svc_str or "[dim]no services[/]",
+                )
+
+            console.print(hosts_table)
+
+        # Credentials table
+        if credentials:
+            creds_table = Table(
+                title="[bold red]🔑 CREDENTIALS[/]",
+                box=box.ROUNDED,
+                show_lines=True,
+                border_style="red",
+            )
+            creds_table.add_column("Type", style="yellow")
+            creds_table.add_column("Value", style="white")
+            creds_table.add_column("Source", style="dim")
+
+            for c in credentials[:10]:
+                creds_table.add_row(
+                    c.get("type", "?"),
+                    str(c.get("value", ""))[:50],
+                    c.get("target", ""),
+                )
+
+            console.print(creds_table)
+
+        # Access table
+        if access_map:
+            access_table = Table(
+                title="[bold magenta]🎯 ACCESS LEVELS[/]",
+                box=box.ROUNDED,
+                border_style="magenta",
+            )
+            access_table.add_column("Host", style="cyan")
+            access_table.add_column("Level", style="bold red")
+
+            for h, level in access_map.items():
+                access_table.add_row(h, level)
+
+            console.print(access_table)
+
+    @staticmethod
+    def scan_results(hosts: list, services: dict):
+        """Show scan results in a professional table."""
+        if not hosts:
+            console.print("[yellow]No hosts found.[/]")
+            return
+
+        table = Table(
+            title="[bold cyan]🔍 SCAN RESULTS[/]",
+            box=box.ROUNDED,
+            show_lines=True,
+            border_style="cyan",
         )
+        table.add_column("Host", style="cyan", no_wrap=True)
+        table.add_column("Port", justify="right", style="green")
+        table.add_column("Service", style="white")
+        table.add_column("Version", style="dim")
 
-    def print_summary(self, state: Any) -> None:
-        """Print engagement summary."""
-        summary = f"""
-[bold]Engagement Summary[/bold]
+        for host in hosts:
+            svcs = services.get(host, [])
+            if svcs:
+                for i, svc in enumerate(svcs):
+                    table.add_row(
+                        host if i == 0 else "",
+                        str(svc.get("port", "?")),
+                        svc.get("service", "?"),
+                        svc.get("version", "")[:30],
+                    )
+            else:
+                table.add_row(host, "-", "[dim]no services[/]", "")
 
-Hosts Discovered: [green]{state.hosts_discovered}[/green]
-Services Found: [green]{state.services_discovered}[/green]
-Vulnerabilities: [yellow]{state.vulnerabilities_found}[/yellow]
-Credentials Found: [green]{state.credentials_found}[/green]
-Objectives Completed: [green]{state.objectives_completed}/{len(state.objectives)}[/green]
-Current Access: [cyan]{state.current_access.value}[/cyan]
-Pivot Depth: [cyan]{state.pivot_depth}/{state.max_pivot_depth}[/cyan]
+        console.print(table)
 
-[bold green]Engagement Complete![/bold green]
-"""
-        self.console.print(Panel(summary, title="Final Report", border_style="green"))
+    @staticmethod
+    def exploit_results(attempts: int, successes: int, details: list):
+        """Show exploit results."""
+        console.print(f"\n[bold red]⚔️  EXPLOITATION RESULTS[/]")
+        console.print(f"[dim]{'─' * 50}[/]")
 
-    def get_input(self, prompt: str = "pen-ai> ") -> str:
-        """Get user input."""
-        return self.console.input(f"[bold cyan]{prompt}[/bold cyan]")
+        # Summary
+        summary = Table(show_header=False, box=None)
+        summary.add_column("Key", style="bold")
+        summary.add_column("Value", justify="right")
+        summary.add_row("Attempts", str(attempts))
+        summary.add_row("[green]Success[/]", f"[green]{successes}[/]")
+        summary.add_row("[red]Failed[/]", f"[red]{attempts - successes}[/]")
+        console.print(summary)
 
-    def start_live(self, layout: Layout) -> Live:
-        """Start a live display."""
-        self._live = Live(layout, console=self.console, refresh_per_second=4)
-        self._live.start()
-        return self._live
+        # Details
+        if details:
+            details_table = Table(
+                title="[dim]Details[/]",
+                box=box.SIMPLE,
+                border_style="dim",
+            )
+            details_table.add_column("Target", style="cyan")
+            details_table.add_column("Technique", style="white")
+            details_table.add_column("Status", justify="center")
 
-    def stop_live(self) -> None:
-        """Stop the live display."""
-        if self._live:
-            self._live.stop()
-            self._live = None
+            for d in details:
+                status = "[green]✓[/]" if d.get("success") else "[red]✗[/]"
+                details_table.add_row(
+                    d.get("target", "?"),
+                    d.get("technique", "?"),
+                    status,
+                )
+
+            console.print(details_table)
+
+    @staticmethod
+    def network_map(hosts: list, services: dict, access_map: dict, pivoted: list):
+        """Show network visualization."""
+        console.print(f"\n[bold cyan]🗺️  NETWORK MAP[/]")
+        console.print(f"[dim]{'─' * 50}[/]")
+
+        if not hosts:
+            console.print("[dim]No hosts discovered yet.[/]")
+            return
+
+        # Group by network
+        networks = {}
+        for host in hosts:
+            parts = host.split(".")
+            if len(parts) == 4:
+                network = ".".join(parts[:3]) + ".0/24"
+                if network not in networks:
+                    networks[network] = []
+                networks[network].append(host)
+
+        for network, net_hosts in networks.items():
+            console.print(f"\n  [bold cyan][{network}][/]")
+            for i, host in enumerate(net_hosts):
+                is_last = i == len(net_hosts) - 1
+                prefix = "└── " if is_last else "├── "
+                access = access_map.get(host, "")
+                access_str = f" [bold red][{access}][/]" if access else ""
+
+                console.print(f"  {prefix}[green]{host}[/]{access_str}")
+
+                svcs = services.get(host, [])
+                if svcs:
+                    svc_prefix = "    " if is_last else "│   "
+                    svc_strs = [f"{s.get('port', '?')}/{s.get('service', '?')}" for s in svcs[:5]]
+                    console.print(f"  {svc_prefix}[dim]{' | '.join(svc_strs)}[/]")
+
+        if pivoted:
+            console.print(f"\n  [bold yellow][PIVOTED NETWORKS][/]")
+            for net in pivoted:
+                console.print(f"  ├── [yellow]{net}[/] [dim](discovered)[/]")
+
+    @staticmethod
+    def report_header(session_id: str, target: str, duration: int, commands: int):
+        """Show report header."""
+        console.print(Panel(
+            f"""[bold white]Session:[/]   {session_id}
+[bold white]Target:[/]    {target}
+[bold white]Duration:[/]  {duration} minutes
+[bold white]Commands:[/]  {commands}""",
+            title="[bold red]📊 ENGAGEMENT REPORT[/]",
+            border_style="red",
+            padding=(1, 2),
+        ))
+
+    @staticmethod
+    def help():
+        """Show help with nice formatting."""
+        console.print(Panel(
+            """[bold cyan]RECON:[/]
+  scan <target>          Scan target (hosts + services)
+  enum                   Enumerate all discovered services
+  map                    Show network visualization
+
+[bold red]EXPLOIT:[/]
+  exploit                Auto-exploit all found services
+  attack <host>:<port>   Attack specific host:port
+  crack                  Crack found hashes
+
+[bold yellow]POST-EXPLOIT:[/]
+  privesc                Attempt privilege escalation
+  loot                   Harvest credentials and sensitive data
+  pivot                  Find and pivot to new networks
+  shell <type>           Generate reverse shell
+
+[bold green]INFO:[/]
+  dashboard              Show engagement dashboard
+  suggest                Get attack suggestions
+  report                 Generate HTML + JSON report
+  creds                  Show all discovered credentials
+
+[bold magenta]SESSION:[/]
+  sessions               List saved sessions
+  resume <session_id>    Resume previous session
+  replay                 List replayable sessions
+  set target <ip>        Set target (auto-scans)
+
+[bold blue]AUTO CHAINS:[/]
+  auto                   Full auto: scan → exploit → privesc → loot
+  auto-recon             Auto recon chain
+  auto-exploit           Auto exploit chain
+  auto-post              Auto post-exploit chain
+
+[bold white]TOOLS:[/]
+  install <tool>         Install a tool
+  run <command>          Run any command
+  help                   Show this help
+  exit / quit / q        Exit (saves session)""",
+            title="[bold red]🎯 PEN-AI COMMANDS[/]",
+            border_style="red",
+            padding=(1, 2),
+        ))
+
+    @staticmethod
+    def progress_bar(description: str):
+        """Get a progress bar context manager."""
+        return Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}[/]"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        )
