@@ -7,7 +7,7 @@ otherwise queries return empty results without crashing.
 """
 
 import os
-from typing import Any, Optional
+from typing import Any
 
 _driver: Any = None
 

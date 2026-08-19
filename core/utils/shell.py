@@ -36,16 +36,8 @@ def build_remote_cmd(
 ) -> str:
     """Build an sshpass ssh command with every interpolated value quoted."""
     return (
-        "sshpass -p {pw} ssh {opts} -o ConnectTimeout={t} "
-        "{user}@{target} -p {port} {cmd}"
-    ).format(
-        pw=q(password),
-        opts=SSH_OPTS,
-        t=int(timeout),
-        user=q(username),
-        target=q(target),
-        port=int(port),
-        cmd=q(local),
+        f"sshpass -p {q(password)} ssh {SSH_OPTS} -o ConnectTimeout={int(timeout)} "
+        f"{q(username)}@{q(target)} -p {int(port)} {q(local)}"
     )
 
 
