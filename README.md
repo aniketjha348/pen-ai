@@ -43,105 +43,82 @@ pip install -e .
 ### First Run
 
 ```bash
-# Initialize configuration
-pen-ai config --init
+# Start interactive REPL
+pen-ai
 
-# Initialize the vector knowledge base
-pen-ai knowledge --init
+# Start with a target
+pen-ai 10.10.10.0/24
 
-# Start an engagement against an internal segment
-pen-ai engage --target 192.168.1.0/24
+# Quick scan mode
+pen-ai scan 10.10.10.0/24
 ```
 
 ---
 
 ## 📋 Command Reference
 
-### Core Commands
+### CLI Commands
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `pen-ai engage` | Start a new engagement | `pen-ai engage --target 10.10.10.0/24` |
-| `pen-ai config` | Show/configure settings | `pen-ai config --init` |
-| `pen-ai version` | Show version | `pen-ai version` |
+| `pen-ai` | Start interactive REPL | `pen-ai` |
+| `pen-ai <target>` | Start REPL with target | `pen-ai 10.10.10.0/24` |
+| `pen-ai scan <target>` | Quick scan and show results | `pen-ai scan 192.168.1.0/24` |
+| `pen-ai sessions` | List saved sessions | `pen-ai sessions` |
+| `pen-ai tools` | List available tools | `pen-ai tools` |
 
 ### Engagement Options
 
 ```bash
 # Basic engagement against an internal segment
-pen-ai engage --target 192.168.1.0/24
+pen-ai 10.10.10.0/24
 
-# With a specific reasoning model
-pen-ai engage --target 10.10.10.0/24 --model mimo
-pen-ai engage --target 10.10.10.0/24 --model deepseek
-pen-ai engage --target 10.10.10.0/24 --model hy3
+# With a specific model
+pen-ai 10.10.10.0/24 --model mimo
+pen-ai 10.10.10.0/24 --model deepseek
+pen-ai 10.10.10.0/24 --model hy3
 
-# Full options
-pen-ai engage \
-  --target 10.10.10.0/24 \
-  --name "Internal Segment Alpha" \
-  --model mimo \
-  --max-pivots 3 \
-  --max-cycles 100
-
-# Without RAG (faster startup)
-pen-ai engage --target 10.10.10.0/24 --no-rag
+# Resume a previous session
+pen-ai --resume 20260819_1430
 ```
 
-### Model Selection
+### REPL Commands (inside interactive mode)
 
-```bash
-# List all models
-pen-ai models
-
-# Model aliases
-pen-ai engage --target 10.10.10.0/24 --model mimo       # Best overall
-pen-ai engage --target 10.10.10.0/24 --model deepseek    # Fastest
-pen-ai engage --target 10.10.10.0/24 --model hy3         # Best reasoning
-
-# Semantic aliases
-pen-ai engage --target 10.10.10.0/24 --model fast        # = deepseek
-pen-ai engage --target 10.10.10.0/24 --model best        # = mimo
-pen-ai engage --target 10.10.10.0/24 --model reasoning   # = hy3
 ```
+RECON:
+  scan <target>          - Scan target (hosts + services)
+  enum                   - Enumerate all discovered services
 
-### Knowledge Base
+EXPLOIT:
+  exploit                - Auto-exploit all found services
+  attack <host>:<port>   - Attack specific host:port
+  crack                  - Crack found hashes
 
-```bash
-# Initialize the vector store
-pen-ai knowledge --init
+POST-EXPLOIT:
+  pivot                  - Find and pivot to new networks
+  shell <type>           - Generate reverse shell (bash/python/php)
 
-# Search methodology / technique knowledge
-pen-ai knowledge --query "nmap scanning"
-pen-ai knowledge --query "kerberoasting"
-pen-ai knowledge --query "buffer overflow"
-pen-ai knowledge --query "firewall bypass"
+INFO:
+  state                  - Show current engagement state
+  suggest                - Get attack suggestions
+  report                 - Show final report
 
-# Filter by category
-pen-ai knowledge --query "exploitation" --category exploitation
-pen-ai knowledge --query "privesc" --category privesc
+SESSION:
+  sessions               - List saved sessions
+  resume <session_id>    - Resume previous session
+  set target <ip>        - Set target
 
-# Show stats
-pen-ai knowledge --stats
-```
+TOOLS:
+  install <tool>         - Install a tool
+  run <command>          - Run any command
+  auto                   - Start autonomous mode (never stops)
 
-### Tools & Exploit Modules
-
-```bash
-# List all tools
-pen-ai tools
-
-# Filter by category
-pen-ai tools --category recon
-pen-ai tools --category exploitation
-pen-ai tools --category web
-
-# List exploit modules
-pen-ai exploits
+OTHER:
+  help                   - Show help
+  exit / quit / q        - Exit (saves session)
 ```
 
 ---
-
 
 ## 🗺️ Enterprise Coverage
 
@@ -224,7 +201,6 @@ async def go():
 The pipeline's scan/filter/exploit runners are injectable (sync or async), so it runs end-to-end offline in tests and degrades gracefully on hosts without the Kali toolchain.
 
 ---
-
 
 ## 🏗️ Architecture
 
