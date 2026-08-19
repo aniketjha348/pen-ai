@@ -1,0 +1,743 @@
+"""PEN-AI REPL - Interactive terminal like Claude Code."""
+
+import asyncio
+import os
+import sys
+import json
+from datetime import datetime
+from typing import Optional
+
+from ai.autonomous_executor import AutonomousExecutor
+from ai.brain import AttackSurface, DecisionEngine
+from ai.streaming import StreamPrinter
+from ai.context_compressor import ContextCompressor
+from ai.credential_cracker import CredentialCracker
+from ai.shell_generator import ShellGenerator
+from core.session import SessionManager
+
+
+class PenAIRepl:
+    """Interactive CLI like Claude Code. Type commands, AI executes."""
+
+    BANNER = """
+\033[91m███╗   ██╗███████╗██╗  ██╗██╗   ██╗███████╗
+\033[91m████╗  ██║██╔════╝╚██╗██╔╝██║   ██║██╔════╝
+\033[91m██╔██╗ ██║█████╗   ╚███╔╝ ██║   ██║███████╗
+\033[91m██║╚██╗██║██╔══╝   ██╔██╗ ██║   ██║╚════██║
+\33[91m██║ ╚████║███████╗██╔╝ ╚██╗╚██████╔╝███████║
+\033[91m╚═╝  ╚═══╝╚══════╝╚═╝   ╚═╝ ╚═════╝ ╚══════╝
+\033[0m  Autonomous Penetration Testing Agent v1.0
+  Type 'help' for commands. Ctrl+C to exit.
+"""
+
+    def __init__(self, llm=None):
+        self.executor = AutonomousExecutor(timeout=300)
+        self.printer = StreamPrinter(delay=0.003)
+        self.compressor = ContextCompressor()
+        self.cracker = CredentialCracker()
+        self.shells = ShellGenerator()
+        self.session_mgr = SessionManager()
+        self.decision_engine = DecisionEngine()
+        self.llm = llm
+
+        # State
+        self.target = ""
+        self.hosts = []
+        self.services = {}  # host: [services]
+        self.credentials = []
+        self.access_map = {}
+        self.pivoted = []
+        self.failed = set()
+        self.commands_run = []
+        self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.running = True
+        self.auto_mode = False
+
+    async def run(self):
+        """Main REPL loop."""
+        print(self.BANNER)
+
+        while self.running:
+            try:
+                # Get input
+                prompt = self._get_prompt()
+                user_input = await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: input(prompt)
+                )
+                user_input = user_input.strip()
+
+                if not user_input:
+                    continue
+
+                # Handle commands
+                if user_input.lower() in ["quit", "exit", "q"]:
+                    await self._cmd_exit()
+                    break
+                elif user_input.lower() == "help":
+                    self._cmd_help()
+                elif user_input.lower() == "state":
+                    self._cmd_state()
+                elif user_input.lower().startswith("scan "):
+                    await self._cmd_scan(user_input[5:].strip())
+                elif user_input.lower() == "scan":
+                    if self.target:
+                        await self._cmd_scan(self.target)
+                    else:
+                        print("  Usage: scan <target>  or  set target <ip>")
+                elif user_input.lower() == "exploit":
+                    await self._cmd_exploit()
+                elif user_input.lower() == "enum":
+                    await self._cmd_enum()
+                elif user_input.lower() == "pivot":
+                    await self._cmd_pivot()
+                elif user_input.lower() == "crack":
+                    await self._cmd_crack()
+                elif user_input.lower() == "report":
+                    self._cmd_report()
+                elif user_input.lower() == "auto":
+                    await self._cmd_auto()
+                elif user_input.lower().startswith("set target "):
+                    self.target = user_input[11:].strip()
+                    print(f"  ✓ Target set: {self.target}")
+                elif user_input.lower().startswith("sessions"):
+                    self._cmd_sessions()
+                elif user_input.lower().startswith("resume "):
+                    self._cmd_resume(user_input[7:].strip())
+                elif user_input.lower().startswith("shell "):
+                    self._cmd_shell(user_input[6:].strip())
+                elif user_input.lower().startswith("attack "):
+                    await self._cmd_attack(user_input[7:].strip())
+                elif user_input.lower() == "suggest":
+                    self._cmd_suggest()
+                elif user_input.lower().startswith("run "):
+                    await self._cmd_run(user_input[4:].strip())
+                elif user_input.lower() == "install":
+                    await self._cmd_install_menu()
+                elif user_input.lower().startswith("install "):
+                    await self._cmd_install(user_input[8:].strip())
+                else:
+                    # Try to run as command
+                    await self._cmd_run(user_input)
+
+            except KeyboardInterrupt:
+                print("\n\n  Ctrl+C. Type 'exit' to quit or 'report' to see results.")
+            except EOFError:
+                break
+            except Exception as e:
+                print(f"  ✗ Error: {e}")
+
+    def _get_prompt(self) -> str:
+        """Get the prompt string."""
+        if self.target:
+            access_info = ""
+            if self.access_map:
+                levels = set(self.access_map.values())
+                access_info = f" [\033[92m{'|'.join(levels)}\033[0m]"
+            return f"\033[91mpen-ai\033[0m:{self.target}{access_info} > "
+        return "\033[91mpen-ai\033[0m > "
+
+    def _cmd_help(self):
+        """Show help."""
+        print("""
+\033[1m  COMMANDS:\033[0m
+
+  \033[96mRECON:\033[0m
+    scan <target>          - Scan target (hosts + services)
+    enum                   - Enumerate all discovered services
+
+  \033[91mEXPLOIT:\033[0m
+    exploit                - Auto-exploit all found services
+    attack <host>:<port>   - Attack specific host:port
+    crack                  - Crack found hashes
+
+  \033[93mPOST-EXPLOIT:\033[0m
+    pivot                  - Find and pivot to new networks
+    shell <type>           - Generate reverse shell (bash/python/php)
+
+  \033[92mINFO:\033[0m
+    state                  - Show current engagement state
+    suggest                - Get attack suggestions
+    report                 - Show final report
+
+  \033[95mSESSION:\033[0m
+    sessions               - List saved sessions
+    resume <session_id>    - Resume previous session
+    set target <ip>        - Set target
+
+  \033[93mTOOLS:\033[0m
+    install <tool>         - Install a tool
+    run <command>          - Run any command
+    auto                   - Start autonomous mode (never stops)
+
+  \033[90mOTHER:\033[0m
+    help                   - Show this help
+    exit / quit / q        - Exit (saves session)
+""")
+
+    def _cmd_state(self):
+        """Show current state."""
+        print(f"""
+\033[1m  ENGAGEMENT STATE\033[0m
+  ─────────────────────────────────
+  Target:     {self.target or 'Not set'}
+  Session:    {self.session_id}
+  Commands:   {len(self.commands_run)}
+  ─────────────────────────────────
+  \033[92mHosts:\033[0m      {len(self.hosts)} discovered
+  \033[96mServices:\033[0m   {sum(len(v) for v in self.services.values())} open
+  \033[91mCredentials:\033[0m {len(self.credentials)} found
+  \033[93mAccess:\033[0m     {self.access_map}
+  \033[95mPivots:\033[0m     {len(self.pivoted)} networks
+  ─────────────────────────────────
+""")
+        if self.hosts:
+            print("  \033[1mHOSTS:\033[0m")
+            for h in self.hosts:
+                svcs = self.services.get(h, [])
+                svc_str = ", ".join(f"{s.get('port', '?')}/{s.get('service', '?')}" for s in svcs)
+                access = self.access_map.get(h, "")
+                access_str = f" [\033[92m{access}\033[0m]" if access else ""
+                print(f"    {h}{access_str}: {svc_str or 'no services found'}")
+
+        if self.credentials:
+            print("\n  \033[1mCREDENTIALS:\033[0m")
+            for c in self.credentials:
+                val = str(c.get("value", ""))[:60]
+                print(f"    [{c.get('type', '?')}] {val}")
+
+    async def _cmd_scan(self, target: str):
+        """Scan a target."""
+        self.target = target
+        print(f"\n  \033[96m🔍 Scanning {target}...\033[0m\n")
+
+        # Phase 1: Host discovery
+        print("  Phase 1: Host discovery...")
+        result = await self.executor.run(f"nmap -sn {target}", timeout=120)
+        if result.exit_code == 0:
+            import re
+            hosts = re.findall(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", result.stdout)
+            self.hosts = list(set(hosts))
+            print(f"  \033[92m✓ Found {len(self.hosts)} hosts\033[0m")
+            for h in self.hosts:
+                print(f"    → {h}")
+        else:
+            print(f"  \033[91m✗ Scan failed: {result.stderr[:100]}\033[0m")
+            return
+
+        if not self.hosts:
+            print("  No live hosts found.")
+            return
+
+        # Phase 2: Service enumeration (top ports first for speed)
+        print(f"\n  Phase 2: Service enumeration on {len(self.hosts)} hosts...")
+        for host in self.hosts[:10]:  # Limit to 10 hosts
+            print(f"    Scanning {host}...")
+            result = await self.executor.run(f"nmap -sV --top-ports 1000 -T4 {host}", timeout=120)
+            if result.exit_code == 0:
+                import re
+                services = []
+                for match in re.finditer(r"(\d+)/(\w+)\s+open\s+(\S+)(?:\s+(.*))?", result.stdout):
+                    port = int(match.group(1))
+                    svc = match.group(3)
+                    ver = match.group(4).strip() if match.group(4) else ""
+                    services.append({"port": port, "service": svc, "version": ver})
+                    print(f"      \033[92m✓\033[0m {port}/{match.group(2)} open {svc} {ver}")
+                self.services[host] = services
+
+        # Show summary
+        total_svcs = sum(len(v) for v in self.services.values())
+        print(f"\n  \033[1m📊 SCAN COMPLETE\033[0m")
+        print(f"  Hosts: {len(self.hosts)} | Services: {total_svcs}")
+
+        # Show attack plan
+        self._show_attack_plan()
+
+    def _show_attack_plan(self):
+        """Show suggested attack plan."""
+        all_svcs = []
+        for host, svcs in self.services.items():
+            for svc in svcs:
+                svc_copy = svc.copy()
+                svc_copy["_host"] = host
+                all_svcs.append(svc_copy)
+        if not all_svcs:
+            return
+
+        plan = AttackSurface.get_attack_plan(all_svcs, host=self.hosts[0] if self.hosts else "?")
+        if not plan:
+            return
+
+        print(f"\n  \033[1m🎯 ATTACK PLAN:\033[0m")
+        for i, attack in enumerate(plan[:10], 1):
+            host = self.hosts[0] if self.hosts else "?"
+            tool = attack["tool"].replace("{target}", host)
+            print(f"    {i}. \033[96m{tool[:70]}\033[0m")
+            print(f"       \033[90m→ {attack['reason']}\033[0m")
+
+        print(f"\n  Run 'exploit' to execute all, or 'attack <host>:<port>' for specific.")
+
+    async def _cmd_exploit(self):
+        """Auto-exploit all found services."""
+        if not self.services:
+            print("  No services found. Run 'scan' first.")
+            return
+
+        print(f"\n  \033[91m⚔️  AUTO-EXPLOIT MODE\033[0m\n")
+
+        for host, svcs in self.services.items():
+            for svc in svcs:
+                port = svc.get("port", 0)
+                service = svc.get("service", "").lower()
+                print(f"  \033[96m→ Attacking {host}:{port} ({service})\033[0m")
+
+                # Get attacks for this service
+                attacks = []
+                for svc_pattern, attack_list in AttackSurface.ATTACK_MAP.items():
+                    if svc_pattern in service:
+                        attacks = attack_list
+                        break
+
+                for attack in attacks:
+                    tool = attack["tool"].replace("{target}", host).replace("{port}", str(port))
+                    if tool in self.failed:
+                        continue
+
+                    print(f"    $ {tool[:80]}")
+                    result = await self.executor.run(tool, timeout=120)
+                    self.commands_run.append(tool)
+
+                    if result.exit_code == 0 and result.stdout:
+                        # Check for interesting output
+                        output = result.stdout
+                        if any(kw in output.lower() for kw in ["password", "credential", "success", "uid=", "root", "found"]):
+                            print(f"    \033[92m✓ INTERESTING OUTPUT:\033[0m")
+                            for line in output.strip().split("\n")[:10]:
+                                print(f"      {line[:100]}")
+
+                            # Try to extract credentials
+                            import re
+                            pw_match = re.findall(r"password[=:]\s*(\S+)", output, re.IGNORECASE)
+                            for pw in pw_match:
+                                self.credentials.append({"type": "password", "value": pw, "host": host})
+                                print(f"    \033[91m🔑 PASSWORD FOUND: {pw}\033[0m")
+
+                            uid_match = re.search(r"uid=(\d+)\((\w+)\)", output)
+                            if uid_match:
+                                level = "root" if uid_match.group(1) == "0" else "user"
+                                self.access_map[host] = level
+                                print(f"    \033[91m🎯 ACCESS: {level} on {host}\033[0m")
+                    else:
+                        self.failed.add(tool)
+
+        print(f"\n  \033[1mEXPLOITATION COMPLETE\033[0m")
+        self._cmd_suggest()
+
+    async def _cmd_enum(self):
+        """Enumerate all services."""
+        if not self.services:
+            print("  No services found. Run 'scan' first.")
+            return
+
+        print(f"\n  \033[96m🔍 ENUMERATING ALL SERVICES\033[0m\n")
+
+        for host, svcs in self.services.items():
+            for svc in svcs:
+                service = svc.get("service", "").lower()
+                port = svc.get("port", 0)
+
+                if "microsoft-ds" in service or "netbios" in service:
+                    print(f"  → SMB enum on {host}...")
+                    result = await self.executor.run(f"enum4linux -a {host}", timeout=120)
+                    if result.exit_code == 0:
+                        print(f"    \033[92m✓ SMB enum complete\033[0m")
+
+                elif service == "http" or service == "https":
+                    scheme = "https" if service == "https" else "http"
+                    print(f"  → Web enum on {host}:{port}...")
+                    result = await self.executor.run(f"gobuster dir -u {scheme}://{host}:{port} -w /usr/share/wordlists/dirb/common.txt -q -t 10 --no-error -s 200,301,302 2>/dev/null | head -30", timeout=60)
+                    if result.exit_code == 0 and result.stdout:
+                        print(f"    \033[92m✓ Directories found:\033[0m")
+                        for line in result.stdout.strip().split("\n")[:15]:
+                            print(f"      {line}")
+
+                elif service == "ldap":
+                    print(f"  → LDAP enum on {host}...")
+                    result = await self.executor.run(f"ldapsearch -h {host} -x -b '' -s base namingContexts", timeout=30)
+                    if result.exit_code == 0:
+                        print(f"    \033[92m✓ LDAP response received\033[0m")
+
+    async def _cmd_pivot(self):
+        """Find and pivot to new networks."""
+        if not self.access_map:
+            print("  No access yet. Exploit first.")
+            return
+
+        print(f"\n  \033[95m🔀 PIVOT DISCOVERY\033[0m\n")
+
+        for host, level in self.access_map.items():
+            cred = self.credentials[0] if self.credentials else None
+            if cred:
+                password = cred.get("password", "")
+                username = cred.get("username", "root")
+
+                # Check routing
+                print(f"  → Checking routes on {host}...")
+                result = await self.executor.run(
+                    f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'ip route'",
+                    timeout=30
+                )
+                if result.exit_code == 0:
+                    print(f"    Routes: {result.stdout[:200]}")
+
+                # Check interfaces
+                result = await self.executor.run(
+                    f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'ip addr'",
+                    timeout=30
+                )
+                if result.exit_code == 0:
+                    print(f"    Interfaces: {result.stdout[:200]}")
+
+                # Check ARP
+                result = await self.executor.run(
+                    f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no {username}@{host} 'arp -a'",
+                    timeout=30
+                )
+                if result.exit_code == 0:
+                    import re
+                    new_hosts = re.findall(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", result.stdout)
+                    for h in new_hosts:
+                        if h not in self.hosts and h != host:
+                            self.hosts.append(h)
+                            print(f"    \033[91m→ NEW HOST: {h}\033[0m")
+
+    async def _cmd_crack(self):
+        """Crack found hashes."""
+        if not self.credentials:
+            print("  No credentials/hashes found yet.")
+            return
+
+        print(f"\n  \033[93m🔓 CRACKING CREDENTIALS\033[0m\n")
+
+        results = await self.cracker.auto_crack(self.credentials)
+        if results:
+            for r in results:
+                print(f"  \033[92m✓ CRACKED: {r.get('password', '?')}\033[0m")
+                if r not in self.credentials:
+                    self.credentials.append(r)
+        else:
+            print("  No additional credentials cracked.")
+
+    def _cmd_report(self):
+        """Show final report."""
+        print(f"""
+\033[1m{'='*60}
+{' '*15}PEN-AI ENGAGEMENT REPORT
+{'='*60}\033[0m
+
+  \033[1mSession:\033[0m   {self.session_id}
+  \033[1mTarget:\033[0m    {self.target}
+  \033[1mCommands:\033[0m  {len(self.commands_run)}
+
+  \033[1mHOSTS DISCOVERED:\033[0m {len(self.hosts)}
+""")
+        for h in self.hosts:
+            svcs = self.services.get(h, [])
+            access = self.access_map.get(h, "")
+            print(f"    {h} {'['+access+']' if access else ''}")
+            for s in svcs:
+                print(f"      {s.get('port', '?')}/{s.get('service', '?')} {s.get('version', '')}")
+
+        print(f"""
+  \033[1mCREDENTIALS FOUND:\033[0m {len(self.credentials)}
+""")
+        for c in self.credentials:
+            print(f"    [{c.get('type', '?')}] {str(c.get('value', ''))[:60]}")
+
+        print(f"""
+  \033[1mACCESS LEVELS:\033[0m
+""")
+        for h, level in self.access_map.items():
+            print(f"    {h}: \033[91m{level}\033[0m")
+
+        print(f"""
+  \033[1mNETWORKS:\033[0m {len(self.pivoted)}
+""")
+        for n in self.pivoted:
+            print(f"    {n}")
+
+        print(f"{'='*60}")
+
+        # Save report
+        import tempfile
+        report = {
+            "session_id": self.session_id,
+            "target": self.target,
+            "hosts": self.hosts,
+            "services": self.services,
+            "credentials": self.credentials,
+            "access_map": self.access_map,
+            "pivoted": self.pivoted,
+            "commands_run": self.commands_run,
+            "timestamp": datetime.now().isoformat(),
+        }
+        report_file = os.path.join(tempfile.gettempdir(), f"penai_{self.session_id}_report.json")
+        with open(report_file, "w") as f:
+            json.dump(report, f, indent=2, default=str)
+        print(f"\n  Report saved to: {report_file}")
+
+    async def _cmd_auto(self):
+        """Start fully autonomous mode."""
+        self.auto_mode = True
+        print(f"\n  \033[91m🤖 AUTONOMOUS MODE ACTIVATED\033[0m")
+        print(f"  Agent will keep running until Ctrl+C\n")
+
+        cycle = 0
+        while self.auto_mode and self.running:
+            cycle += 1
+            print(f"\n  \033[90m─── CYCLE {cycle} ───\033[0m")
+
+            # Get next actions
+            state = {
+                "target": self.target,
+                "hosts": self.hosts,
+                "services": self.services,
+                "credentials": self.credentials,
+                "access_map": self.access_map,
+                "pivoted": self.pivoted,
+                "failed": list(self.failed),
+                "commands_run": self.commands_run,
+            }
+
+            commands = self.decision_engine.decide_next(state)
+
+            if commands:
+                for cmd in commands:
+                    print(f"  $ {cmd[:100]}")
+                    result = await self.executor.run(cmd, timeout=120)
+                    self.commands_run.append(cmd)
+
+                    if result.exit_code == 0:
+                        # Update state from output
+                        self._parse_output(cmd, result.stdout, result.stderr)
+                    else:
+                        self.failed.add(cmd)
+
+            # Auto-save
+            self.session_mgr.auto_save(self._get_state(), self.session_id, interval_cycles=5)
+
+    def _cmd_suggest(self):
+        """Show attack suggestions."""
+        # Use services-based hosts if hosts list is empty
+        effective_hosts = self.hosts or list(self.services.keys())
+
+        state = {
+            "target": self.target,
+            "hosts": effective_hosts,
+            "services": self.services,
+            "credentials": self.credentials,
+            "access_map": self.access_map,
+            "failed": list(self.failed),
+            "commands_run": self.commands_run,
+        }
+
+        commands = self.decision_engine.decide_next(state)
+        reasoning = AttackSurface.reason_about_findings(state)
+
+        print(f"\n  \033[1mSUGGESTIONS:\033[0m")
+        print(f"  {reasoning}")
+        print()
+
+        # Show attack plan if services known
+        if self.services:
+            self._show_attack_plan()
+        else:
+            for cmd in commands:
+                print(f"    -> \033[96m{cmd[:80]}\033[0m")
+
+    async def _cmd_attack(self, target: str):
+        """Attack specific host:port."""
+        if ":" in target:
+            host, port = target.split(":", 1)
+            port = int(port)
+        else:
+            host = target
+            port = 80
+
+        # Find service
+        service = "http"
+        for h, svcs in self.services.items():
+            for s in svcs:
+                if s.get("port") == port:
+                    service = s.get("service", "http")
+                    break
+
+        print(f"\n  \033[91m⚔️  ATTACKING {host}:{port} ({service})\033[0m\n")
+
+        for svc_pattern, attacks in AttackSurface.ATTACK_MAP.items():
+            if svc_pattern in service.lower():
+                for attack in attacks:
+                    tool = attack["tool"].replace("{target}", host).replace("{port}", str(port))
+                    print(f"  $ {tool[:80]}")
+                    result = await self.executor.run(tool, timeout=120)
+                    self.commands_run.append(tool)
+                    if result.exit_code == 0 and result.stdout:
+                        self._parse_output(tool, result.stdout, result.stderr)
+                break
+
+    async def _cmd_run(self, command: str):
+        """Run any command."""
+        print(f"  $ {command}")
+        result = await self.executor.run(command, timeout=300)
+        self.commands_run.append(command)
+
+        if result.stdout:
+            for line in result.stdout.strip().split("\n")[:30]:
+                print(f"  {line}")
+        if result.stderr and result.exit_code != 0:
+            print(f"  \033[91m{result.stderr[:200]}\033[0m")
+
+        self._parse_output(command, result.stdout, result.stderr)
+
+    async def _cmd_install(self, tool: str):
+        """Install a tool."""
+        print(f"  Installing {tool}...")
+        result = await self.executor.install_tool(tool)
+        if result.exit_code == 0:
+            print(f"  \033[92m✓ {tool} installed\033[0m")
+        else:
+            print(f"  \033[91m✗ Failed to install {tool}\033[0m")
+
+    async def _cmd_install_menu(self):
+        """Show install menu."""
+        tools = {
+            "nmap": "Network scanner",
+            "enum4linux": "SMB/AD enumeration",
+            "gobuster": "Directory brute force",
+            "ffuf": "Fast web fuzzer",
+            "nikto": "Web vulnerability scanner",
+            "hydra": "Login brute force",
+            "sqlmap": "SQL injection",
+            "john": "Password cracker",
+            "hashcat": "GPU password cracker",
+            "smbclient": "SMB client",
+            "ldapsearch": "LDAP enumeration",
+            "impacket": "AD attack tools",
+            "binwalk": "Firmware analysis",
+            "checksec": "Binary security check",
+        }
+        print("\n  \033[1mAVAILABLE TOOLS:\033[0m")
+        for tool, desc in tools.items():
+            print(f"    {tool:20s} - {desc}")
+        print("\n  Usage: install <tool_name>")
+
+    def _cmd_shell(self, shell_type: str):
+        """Generate reverse shell."""
+        if not self.access_map:
+            print("  No access yet. Need LHOST and LPORT.")
+            print("  Usage: shell <type> <lhost> <lport>")
+            return
+
+        parts = shell_type.split()
+        if len(parts) == 3:
+            stype, lhost, lport = parts
+            shell = self.shells.generate_reverse_shell(stype, lhost, int(lport))
+            print(f"\n  \033[91mSHELL ({stype}):\033[0m")
+            print(f"  {shell}")
+        else:
+            print("  Usage: shell <bash|python|php|powershell> <lhost> <lport>")
+
+    def _cmd_sessions(self):
+        """List sessions."""
+        sessions = self.session_mgr.list_sessions()
+        if not sessions:
+            print("  No saved sessions.")
+            return
+        print("\n  \033[1mSAVED SESSIONS:\033[0m")
+        for s in sessions:
+            print(f"    {s['session_id']} | {s['target']} | Cycle {s['cycle']} | {s['hosts']} hosts | {s['credentials']} creds")
+
+    def _cmd_resume(self, session_id: str):
+        """Resume a session."""
+        state = self.session_mgr.load(session_id)
+        if state:
+            self.target = state.get("target", "")
+            self.hosts = state.get("known_hosts", [])
+            self.services = state.get("known_services", {})
+            self.credentials = state.get("credentials", [])
+            self.access_map = state.get("access_map", {})
+            self.pivoted = state.get("pivoted_networks", [])
+            self.commands_run = state.get("commands_run", [])
+            self.session_id = session_id
+            print(f"  \033[92m✓ Resumed session {session_id}\033[0m")
+            self._cmd_state()
+        else:
+            print(f"  \033[91m✗ Session {session_id} not found\033[0m")
+
+    async def _cmd_exit(self):
+        """Exit and save."""
+        state = self._get_state()
+        self.session_mgr.save(state, self.session_id)
+        print(f"  Session saved: {self.session_id}")
+
+    def _parse_output(self, command: str, stdout: str, stderr: str):
+        """Parse command output and update state."""
+        import re
+        output = stdout + stderr
+
+        # Extract hosts
+        hosts = re.findall(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", output)
+        for h in hosts:
+            if h not in self.hosts:
+                self.hosts.append(h)
+
+        # Extract services
+        services = re.findall(r"(\d+)/(\w+)\s+open\s+(\S+)(?:\s+(.*))?", output)
+        for port, proto, svc, ver in services:
+            host = self.target
+            for h in self.hosts:
+                if h in command:
+                    host = h
+                    break
+            if host not in self.services:
+                self.services[host] = []
+            svc_info = {"port": int(port), "service": svc, "version": ver.strip() if ver else ""}
+            if svc_info not in self.services[host]:
+                self.services[host].append(svc_info)
+
+        # Extract credentials
+        pw_matches = re.findall(r"password[=:]\s*(\S+)", output, re.IGNORECASE)
+        for pw in pw_matches:
+            if not any(c.get("value") == pw for c in self.credentials):
+                self.credentials.append({"type": "password", "value": pw})
+                print(f"  \033[91m🔑 PASSWORD: {pw}\033[0m")
+
+        # Detect access
+        if "uid=0" in output:
+            for h in self.hosts:
+                if h in command:
+                    self.access_map[h] = "root"
+        elif "uid=" in output:
+            for h in self.hosts:
+                if h in command:
+                    self.access_map[h] = "user"
+
+        # Detect new networks
+        routes = re.findall(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2})", output)
+        for route in routes:
+            if route not in self.pivoted and route != self.target:
+                self.pivoted.append(route)
+
+    def _get_state(self) -> dict:
+        """Get state as dict."""
+        return {
+            "session_id": self.session_id,
+            "target": self.target,
+            "known_hosts": self.hosts,
+            "known_services": self.services,
+            "credentials": self.credentials,
+            "access_map": self.access_map,
+            "pivoted_networks": self.pivoted,
+            "failed_attempts": list(self.failed),
+            "commands_run": self.commands_run,
+            "cycle": len(self.commands_run),
+        }
