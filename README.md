@@ -156,7 +156,7 @@ PEN-AI treats an internal network like a real one — starting from a foothold a
 | **IoT / Specialty** | Device discovery, firmware acquisition & extraction, firmware analysis, hardcoded credential review, protocol analysis |
 | **Binary / Software** | checksec-style hardening checks, static & dynamic analysis, fuzzing, buffer-overflow / format-string exploit generation |
 | **Host / Privilege Escalation** | SUID, writable cron, kernel, credential hunting, LinPEAS-style enumeration |
-| **Post-Exploitation & Pivoting** | SSH/command execution, credential harvesting, SOCKS/chisel pivots, lateral movement |
+| **Post-Exploitation & Pivoting** | Persistent SSH sessions (connect once, exec many, auto-reconnect), credential harvesting, SOCKS/chisel pivots, lateral movement |
 
 ### Go Deeper: Firewall & Filter Engine
 
@@ -260,6 +260,7 @@ Two complementary operating modes:
 - **OS:** Kali Linux (or any Linux with the toolchain below). The shell-outs use `apt-get`, `which`, `/tmp`, `sshpass`, `smbclient`, `nmap`, etc., so a Windows host is **not** the runtime target.
 - **LLM API:** a reasoning model (MiMo / DeepSeek / Hy3 via an OpenAI-compatible endpoint, default `https://opencode.ai/zen/v1`). Without a key, PEN-AI falls back to built-in heuristic commands (reduced "freewill").
 - **Recommended tooling** (auto-usable if installed): `nmap`, `sshpass`, `smbclient`, `crackmapexec`, `impacket`, `bloodhound-python`, `sqlmap`, `hydra`, `searchsploit`, `metasploit`, `john`/`hashcat`, `linpeas`, `chisel`, `binwalk`, `gdb`/`pwndbg`/`radare2`.
+- **Neo4j (optional)** — BloodHound attack-path queries (`enterprise/bloodhound_queries.py`) auto-connect via `BLOODHOUND_URI`/`BLOODHOUND_USER`/`BLOODHOUND_PASSWORD` env vars, or `bolt://localhost:7687` with `neo4j`/`bloodhound` defaults; return empty results when offline.
 
 ---
 
@@ -302,7 +303,7 @@ pytest tests/test_firewall.py -v   # firewall/filter analysis engine
 pytest tests/ --cov=pen-ai --cov-report=html
 ```
 
-Current suite: **185 tests** (2 Windows-specific autonomous-executor tests fail only on non-Linux hosts).
+Current suite: **207 tests** (2 Windows-specific autonomous-executor tests fail only on non-Linux hosts).
 
 ---
 
@@ -323,6 +324,7 @@ pen-ai/
 │   ├── reasoner.py              # Hypothesis generation
 │   ├── memory.py                # 3-level memory
 │   ├── llm_client.py            # LLM API client + tool calling
+│   ├── sessions.py              # Persistent paramiko SSH session manager
 │   └── tool_registry.py         # Dynamic tool registry
 ├── core/
 │   ├── state/engagement_state.py # Digital twin of the network
@@ -331,6 +333,7 @@ pen-ai/
 │   └── orchestrator/
 │       ├── main.py              # Engagement loop
 │       └── pipeline.py          # DeepEngage: zero-to-advanced chained pipeline
+│   └── utils/shell.py           # Safe shell command builders (quoting)
 ├── recon/
 │   ├── network.py               # Host discovery, port/service scan
 │   ├── parallel.py              # Parallel scanning
@@ -346,13 +349,15 @@ pen-ai/
 │   ├── orchestrator.py          # Exploit orchestrator
 │   └── engine.py                # Exploitation engine
 ├── enterprise/tools.py          # MSF, CrackMapExec, BloodHound, SQLMap, Hydra, LinPEAS, Chisel
+├── enterprise/bloodhound_queries.py  # Neo4j attack-path Cypher queries
 ├── post_exploitation/engine.py   # Post-access actions
 ├── pivoting/manager.py           # Pivot management
 ├── objectives/tracker.py
 ├── evidence/collector.py
 ├── attack_graph/graph.py
 ├── findings/engine.py
-├── reporting/generator.py
+├── reporting/generator.py        # CVSS v3.1 auto-scored findings
+├── reporting/cvss.py             # CVSS v3.1 scoring engine
 ├── knowledge/
 │   ├── methodology_data.py       # Enterprise pentest knowledge base
 │   └── rag.py                    # ChromaDB RAG

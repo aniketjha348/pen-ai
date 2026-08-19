@@ -6,11 +6,10 @@ never stalls the event loop.
 """
 
 import asyncio
-from typing import Optional
 
 import paramiko
 
-from ai.tool_registry import ToolCategory, register_tool, ToolParameter
+from ai.tool_registry import ToolCategory, ToolParameter, register_tool
 
 
 class SSHSession:
@@ -21,7 +20,7 @@ class SSHSession:
         self.username = username
         self.port = port
         self.connected = False
-        self._client: Optional[paramiko.SSHClient] = None
+        self._client: paramiko.SSHClient | None = None
 
     @property
     def key(self) -> str:
@@ -48,7 +47,9 @@ class SSHSession:
             self.connected = False
             return False
 
-    async def exec(self, command: str, timeout: int = 30, password: str = "", key_path: str = "") -> tuple[str, int]:
+    async def exec(
+        self, command: str, timeout: int = 30, password: str = "", key_path: str = ""
+    ) -> tuple[str, int]:
         if not self.connected:
             if not await self.connect(password, key_path):
                 return "", 1
@@ -138,7 +139,10 @@ SSH_SESSION_MANAGER = SSHSessionManager()
 
 @register_tool(
     name="ssh_session_exec",
-    description="Execute a command over a PERSISTENT SSH session (reconnects transparently, reuses the connection for subsequent commands)",
+    description=(
+        "Execute a command over a PERSISTENT SSH session "
+        "(reconnects transparently, reuses the connection for subsequent commands)"
+    ),
     category=ToolCategory.EXPLOITATION,
     parameters=[
         ToolParameter(name="host", type="str", description="Target IP"),
@@ -148,7 +152,9 @@ SSH_SESSION_MANAGER = SSHSessionManager()
         ToolParameter(name="port", type="int", description="SSH port", required=False, default=22),
     ],
 )
-async def ssh_session_exec(host: str, username: str, password: str, command: str, port: int = 22) -> dict:
+async def ssh_session_exec(
+    host: str, username: str, password: str, command: str, port: int = 22
+) -> dict:
     out, code = await SSH_SESSION_MANAGER.exec_on(host, username, password, command, port)
     return {"success": code == 0, "output": out, "exit_code": code, "persistent": True}
 

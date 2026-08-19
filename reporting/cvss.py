@@ -7,7 +7,9 @@ impact/exploitability sub-scores, scope handling and the round-up rule.
 import math
 import re
 
-_VECTOR_PATTERN = re.compile(r"^CVSS:3\.[01]/(AV:[NALP]|AC:[LH]|PR:[NLH]|UI:[NR]|S:[UC]|C:[NLH]|I:[NLH]|A:[NLH])")
+_VECTOR_PATTERN = re.compile(
+    r"^CVSS:3\.[01]/(AV:[NALP]|AC:[LH]|PR:[NLH]|UI:[NR]|S:[UC]|C:[NLH]|I:[NLH]|A:[NLH])"
+)
 
 _ATTACK_VECTOR = {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.20}
 _ATTACK_COMPLEXITY = {"L": 0.77, "H": 0.44}
@@ -60,7 +62,9 @@ def cvss_score(vector: str) -> float:
 
     iss = 1.0 - (1.0 - c) * (1.0 - i) * (1.0 - a)
     if scope_changed:
-        impact = _CHANGED_WEIGHT * (iss - _CHANGED_MINUS) - _CHANGED_EXP * (iss - _CHANGED_EXP_ARG) ** _CHANGED_EXP_POWER
+        impact = _CHANGED_WEIGHT * (iss - _CHANGED_MINUS) - _CHANGED_EXP * (
+            iss - _CHANGED_EXP_ARG
+        ) ** _CHANGED_EXP_POWER
     else:
         impact = _UNCHANGED_WEIGHT * iss
     exploitability = _EXPLOITABILITY_WEIGHT * av * ac * pr * ui

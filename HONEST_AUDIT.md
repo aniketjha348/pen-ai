@@ -118,13 +118,25 @@
 
 **Current State: 60% REAL, 40% PLACEHOLDER**
 
-For true enterprise engagements readiness, we need:
-1. Real impacket integration for AD attacks
-2. Real pwntools/checksec for binary exploitation
-3. Real binwalk for IoT firmware analysis
-4. Real command execution for privesc modules
+### Enterprise Hardening Progress (2026-08-19)
 
-**Without these fixes, PEN-AI is NOT ready for real PenTest examination.**
+Landscape fixed on the `enterprise-hardening` branch:
+
+| Fix | Status |
+|-----|--------|
+| Shell command injection fixes (sshpass/ssh/smbclient quoting via `core/utils/shell.py`) | DONE |
+| Persistent SSH sessions (paramiko `ai/sessions.py`: connect once, exec many, transparent reconnect) | DONE |
+| Post-exploitation routed through persistent sessions (`post_exploitation/engine.py`) with pivot cleanup (`pivoting/manager.py`) | DONE |
+| BloodHound neo4j attack-path queries (`enterprise/bloodhound_queries.py`, real Cypher vs placeholder note) | DONE |
+| CVSS v3.1 scoring engine (`reporting/cvss.py`, pure stdlib, auto-scored findings) | DONE |
+
+### Still Placeholder (unchanged)
+- AD Kerberoasting / DCSync / AS-REP Roast / LDAP Enum (impacket integration)
+- Binary analysis (pwntools/checksec)
+- IoT firmware (binwalk/QEMU)
+- SMB MITM
+
+**Without impacket/pwntools/binwalk integration, PEN-AI is still NOT ready for real PenTest examination of AD/binary/IoT targets.**
 
 ---
 
