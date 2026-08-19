@@ -361,7 +361,7 @@ pen-ai/
 ├── knowledge/
 │   ├── methodology_data.py       # Enterprise pentest knowledge base
 │   └── rag.py                    # ChromaDB RAG
-└── tests/                        # 180 tests
+└── tests/                        # 208 tests (all passing)
 ```
 
 ---
