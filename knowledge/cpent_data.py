@@ -129,6 +129,36 @@ RECON_ENTRIES = [
         tags=["network", "mapping", "topology"],
         importance=0.8,
     ),
+    KnowledgeEntry(
+        id="recon_004",
+        title="Firewall / Filter Identification (Go Deeper)",
+        content="""Identifying the filtering mechanism protecting a subnet:
+- ICMP Type 3 Code 13 (Communication Administratively Prohibited) = Cisco router / stateless ACL - THE CPENT firewall signature.
+- ICMP Type 3 Code 10 (Host Administratively Prohibited) = iptables / stateful host deny.
+- ICMP Type 3 Code 3 (Port Unreachable) confirms the host is ALIVE and routed behind the filter.
+- 'closed' responses prove the host is live; 'filtered' responses mean silent-drop.
+Mechanisms to distinguish: Router ACL, Firewall software, IP tables, Firewall device.
+If the firewall admin left ICMP unreachable exposed, that is a misconfiguration finding.
+Use pen-ai tool: filter_detect""",
+        category=KnowledgeCategory.RECONNAISSANCE,
+        tags=["firewall", "filter", "icmp", "cisco", "stateless", "router"],
+        importance=0.95,
+    ),
+    KnowledgeEntry(
+        id="recon_005",
+        title="Stateless Filter Bypass (Source-Port Spoofing)",
+        content="""Stateless ACLs with weak rules can be bypassed by spoofing the source port:
+- FTP data channel uses source port 20, so nmap -g 20 can bypass an FTP-only rule.
+- Other useful source ports: 53 (DNS), 67/68 (DHCP), 80/443 (web).
+- Workflow: (1) baseline scan, (2) re-scan with -g <source_port>, (3) diff results to expose newly-visible ports.
+- After bypass, enumerate the full attack surface and continue exploitation.
+Also try fragmentation (-f) and -Pn to map the surface behind the ACL.
+Use pen-ai tool: filter_sourceport_bypass""",
+        category=KnowledgeCategory.RECONNAISSANCE,
+        tags=["bypass", "stateless", "acl", "source-port", "ftp", "firewall"],
+        importance=0.95,
+    ),
+
 ]
 
 # ============================================================

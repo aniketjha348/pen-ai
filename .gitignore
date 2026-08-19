@@ -15,3 +15,6 @@ venv/
 .venv/
 *.db
 *.sqlite3
+knowledge/chroma_db/
+.coverage
+htmlcov/
