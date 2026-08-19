@@ -113,14 +113,18 @@ REASONING: [Why you chose this command]
 EXPECTED: [What you expect to learn or achieve]
 CONFIDENCE: [high/medium/low]
 
-IMPORTANT:
+IMPORTANT RULES:
+- NEVER conclude early or say 'done' until you've tried EVERY possible attack
 - If a tool is not installed, install it first
-- If an attack fails, try a different approach
-- If you gain access, enumerate the compromised system
-- If you find credentials, try them everywhere
-- If you find new networks, scan them too
-- Always record your findings
-- Never stop until you've exhausted all options
+- If an attack fails, try a DIFFERENT approach (different tool, different user, different technique)
+- If you gain access, enumerate EVERYTHING on the compromised system
+- If you find credentials, try them on EVERY other host and service
+- If you find new networks, scan them ALL
+- If SSH fails, try SMB. If SMB fails, try HTTP. If HTTP fails, try FTP.
+- If brute force fails, try default creds. If default creds fail, try null session.
+- ALWAYS keep going until you've tried: scanning, enum, exploit, privesc, pivot, loot
+- Only stop when you've exhausted ALL options on ALL hosts
+- Remember: the goal is to find as many vulnerabilities as possible
 """
 
     def get_analysis_prompt(self, command: str, output: str, exit_code: int) -> str:
@@ -279,7 +283,7 @@ REASONING: [Why you're stopping]
         return True
 
     def _fallback_decide(self) -> str:
-        """Fallback decision when no LLM is available."""
+        """Fallback decision when no LLM is available - keeps trying."""
         if not self.hosts:
             return f"""ANALYSIS: No hosts discovered yet. Need to scan the target.
 NEXT_COMMAND: nmap -sn -T4 {self.target}
@@ -295,14 +299,36 @@ REASONING: Full port scan with version detection
 EXPECTED: Find open services and their versions
 CONFIDENCE: high"""
 
-        return """ANALYSIS: Need LLM for intelligent decision making.
-NEXT_COMMAND: none
-REASONING: No LLM available, cannot make intelligent decisions
-EXPECTED: Manual intervention required
-CONFIDENCE: low"""
+        # Try exploitation if services found
+        if self.services and not self.access_map:
+            host = list(self.services.keys())[0]
+            svc = self.services[host][0] if self.services[host] else None
+            if svc:
+                service = svc.get('service', 'http')
+                port = svc.get('port', 80)
+                return f"""ANALYSIS: Services found. Trying exploitation on {host}:{port} ({service}).
+NEXT_COMMAND: hydra -l admin -P /usr/share/wordlists/rockyou.txt {service}://{host} -t 4 -f
+REASONING: Brute force {service} service
+EXPECTED: Find credentials
+CONFIDENCE: medium"""
+
+        # Try different scan types
+        if self.hosts:
+            host = self.hosts[0]
+            return f"""ANALYSIS: Trying different scan approach on {host}.
+NEXT_COMMAND: nmap -sU --top-ports 100 -T4 {host}
+REASONING: UDP scan to find additional services
+EXPECTED: Find UDP services
+CONFIDENCE: medium"""
+
+        return f"""ANALYSIS: Continuing enumeration.
+NEXT_COMMAND: nmap -A -T4 {self.target}
+REASONING: Aggressive scan for more details
+EXPECTED: Find more information
+CONFIDENCE: medium"""
 
     def _fallback_analyze(self, command: str, output: str) -> str:
-        """Fallback analysis when no LLM is available."""
+        """Fallback analysis when no LLM is available - always suggests next step."""
         hosts_found = len(re.findall(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", output))
         services_found = len(re.findall(r"\d+/\w+\s+open\s+\S+", output))
 
@@ -314,17 +340,19 @@ EXPECTED: Find open ports and service versions
 CONFIDENCE: high"""
 
         if services_found > 0:
-            return f"""ANALYSIS: Found {services_found} open services. Need to analyze for vulnerabilities.
-NEXT_COMMAND: none
-REASONING: Manual analysis required without LLM
-EXPECTED: Identify attack vectors
-CONFIDENCE: low"""
+            host = self.hosts[0] if self.hosts else self.target
+            return f"""ANALYSIS: Found {services_found} open services. Trying exploitation.
+NEXT_COMMAND: hydra -l root -P /usr/share/wordlists/rockyou.txt ssh://{host} -t 4 -f
+REASONING: Brute force SSH on first host
+EXPECTED: Find credentials
+CONFIDENCE: medium"""
 
-        return """ANALYSIS: Output doesn't reveal clear next steps.
-NEXT_COMMAND: none
-REASONING: Need LLM for intelligent analysis
-EXPECTED: Manual intervention
-CONFIDENCE: low"""
+        # Always suggest something - never return none
+        return f"""ANALYSIS: Trying additional enumeration.
+NEXT_COMMAND: nmap --script=vuln -T4 {self.target}
+REASONING: Vulnerability scan to find exploitable services
+EXPECTED: Find known vulnerabilities
+CONFIDENCE: medium"""
 
     async def engage(self, target: str, scope: str = None, max_cycles: int = 100):
         """Main engagement loop. Fully autonomous."""
@@ -341,7 +369,7 @@ CONFIDENCE: low"""
 
         cycle = 0
         consecutive_failures = 0
-        max_failures = 5
+        max_failures = 20  # Keep trying even if many commands fail
 
         while cycle < max_cycles:
             cycle += 1
@@ -358,10 +386,15 @@ CONFIDENCE: low"""
             print(f"  [Next Command] {parsed['next_command'][:100]}")
             print(f"  [Reasoning] {parsed['reasoning'][:150]}")
 
-            # 2. Check if done
+            # 2. Check if done - but only if LLM explicitly says so with reasoning
             if parsed['next_command'].lower() in ['none', 'done', 'stop', 'complete']:
-                print(f"\n  [DONE] LLM decided engagement is complete.")
-                break
+                # Don't stop immediately - ask LLM to confirm
+                if cycle > 10 and len(self.credentials) > 0:
+                    print(f"\n  [DONE] LLM decided engagement is complete.")
+                    break
+                else:
+                    print(f"  [CONTINUING] LLM said done but more work to do. Retrying...")
+                    continue
 
             # 3. Safety check
             if not self.is_safe_command(parsed['next_command']):
