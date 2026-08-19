@@ -59,6 +59,49 @@ def main(
 
 
 @app.command()
+def freewill(
+    target: str = typer.Argument(..., help="Target IP or CIDR"),
+    model: str = typer.Option("mimo", help="LLM model to use"),
+    scope: Optional[str] = typer.Option(None, help="Scope (CIDR), defaults to target"),
+    max_cycles: int = typer.Option(100, help="Max engagement cycles"),
+):
+    """Start fully autonomous LLM-driven engagement.
+
+    The LLM decides EVERYTHING:
+    - What to scan
+    - What to enumerate
+    - What to exploit
+    - How to pivot
+    - What to report
+
+    Examples:
+        pen-ai freewill 10.10.10.0/24
+        pen-ai freewill 192.168.1.0/24 --model deepseek
+        pen-ai freewill 10.10.10.5 --scope 10.10.10.0/24
+    """
+    from ai.freewill_agent import FreewillAgent
+    from ai.llm_client import LLMClient
+    from app.config.models import get_model_config
+
+    # Setup LLM
+    llm = None
+    try:
+        config = get_model_config(model)
+        llm = LLMClient(
+            api_key=config.get("api_key", ""),
+            base_url=config.get("base_url", "https://opencode.ai/zen/v1"),
+            model=config.get("model_id", "mimo-v2.5-free"),
+        )
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not setup LLM: {e}[/yellow]")
+        console.print("[yellow]Running in fallback mode (limited intelligence)[/yellow]")
+
+    # Create and run agent
+    agent = FreewillAgent(llm_client=llm)
+    asyncio.run(agent.engage(target=target, scope=scope, max_cycles=max_cycles))
+
+
+@app.command()
 def scan(
     target: str = typer.Argument(..., help="Target IP or CIDR"),
     model: str = typer.Option("mimo", help="LLM model"),
@@ -68,7 +111,7 @@ def scan(
 
     repl = PenAIRepl()
     asyncio.run(repl._cmd_scan(target))
-    repl._cmd_state()
+    repl._cmd_dashboard()
     repl._cmd_suggest()
 
 
