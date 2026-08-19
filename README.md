@@ -2,23 +2,18 @@
 
 **Autonomous AI Penetration Testing Agent for Enterprise Internal Networks**
 
-> An autonomous red-team operator that discovers, enumerates, exploits, pivots, and reports across **any authorized enterprise internal environment** — from a single workstation to fully segmented multi-zone corporate networks. Zero to advanced/ultra-advanced, end to end.
-
-Covers the full internal-engagement attack surface: **network**, **Active Directory**, **web applications**, **IoT/specialty devices**, **binary/software**, and **host-based targets**. It combines structured tooling with adaptive LLM-driven decision making and a "Go Deeper" firewall/filter bypass engine so it keeps working even against networks that filter, rate-limit, and otherwise resist scanning.
-
-> **Intended use:** authorized penetration testing and defensive security assessment only (your own infrastructure, or explicit written engagement scope). Unauthorized access is illegal — see [Responsible Use](#-responsible-use--authorization).
+> An autonomous red-team operator that discovers, enumerates, exploits, pivots, and reports across **any authorized enterprise internal environment**. Zero to advanced, end to end. **100% LLM-driven** — no hardcoded rules, no fixed attack chains.
 
 ---
 
 ## ✨ Why PEN-AI
 
-Most automated scanners stop at "find an open port." PEN-AI is built as an **adversary, not a scanner**:
-
-- **Fully LLM-driven, zero hardcoded rules** — the LLM decides every action: which scan tools to use, which attacks to attempt, which post-exploit paths to explore. No fixed attack chains, no hardcoded tool mappings, no preset vulnerability lists.
-- **Zero-to-advanced lifecycle** — host discovery → deep enumeration → filter/firewall bypass → exploitation → post-exploitation → privilege escalation → lateral movement → pivoting → objective completion → reporting.
-- **Works against hardened networks** — understands ICMP filtering, rate limiting, stateless ACLs, and firewall misconfigurations, and adjusts scanning vigor accordingly.
-- **Full attack-surface coverage** — one operator across AD, web, binary, IoT, and host targets, with enterprise tool integration (Metasploit, CrackMapExec, BloodHound, SQLMap, Hydra, LinPEAS, Chisel...).
-- **Evidence & reporting built-in** — every action is logged; findings, credentials, and access are tracked and exported for a professional report.
+- **Fully LLM-driven, zero hardcoded rules** — the LLM decides every action
+- **3 Operating Modes** — Full Auto, Semi-Auto, Manual
+- **Zero-to-advanced lifecycle** — scan → enum → exploit → privesc → pivot → loot → report
+- **Works against hardened networks** — firewall bypass, ACL analysis, rate limiting
+- **Full attack-surface coverage** — AD, web, binary, IoT, host targets
+- **Evidence & reporting built-in** — HTML + JSON reports with CVSS scoring
 
 ---
 
@@ -27,30 +22,22 @@ Most automated scanners stop at "find an open port." PEN-AI is built as an **adv
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/aniketjha348/pen-ai.git
 cd pen-ai
-
-# Install with all dependencies (dev + RAG knowledge base)
 pip install -e ".[dev,rag]"
-
-# Or install core only
-pip install -e .
 ```
 
-> **Runtime environment:** PEN-AI is a Kali/Linux-oriented tool (it shells out to `nmap`, `sshpass`, `smbclient`, etc.). Run it inside a Kali VM/container, or any Linux box with the required tooling. See [Environment](#-environment--required-tools).
-
-### First Run
+### Three Ways to Use
 
 ```bash
-# Start interactive REPL
-pen-ai
+# 🔴 MODE 1: FULL AUTONOMOUS (LLM decides everything)
+pen-ai freewill 10.10.10.0/24
 
-# Start with a target
+# 🟡 MODE 2: SEMI-AUTOMATIC (auto chain, you review)
+pen-ai auto 10.10.10.0/24
+
+# 🟢 MODE 3: MANUAL (you decide, tool executes)
 pen-ai 10.10.10.0/24
-
-# Quick scan mode
-pen-ai scan 10.10.10.0/24
 ```
 
 ---
@@ -61,33 +48,20 @@ pen-ai scan 10.10.10.0/24
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `pen-ai` | Start interactive REPL | `pen-ai` |
-| `pen-ai <target>` | Start REPL with target | `pen-ai 10.10.10.0/24` |
-| `pen-ai scan <target>` | Quick scan and show results | `pen-ai scan 192.168.1.0/24` |
-| `pen-ai sessions` | List saved sessions | `pen-ai sessions` |
-| `pen-ai tools` | List available tools | `pen-ai tools` |
+| `pen-ai <target>` | Interactive REPL | `pen-ai 10.10.10.0/24` |
+| `pen-ai freewill <target>` | Full autonomous mode | `pen-ai freewill 10.10.10.0/24` |
+| `pen-ai auto <target>` | Semi-auto mode | `pen-ai auto 10.10.10.0/24` |
+| `pen-ai scan <target>` | Quick scan | `pen-ai scan 192.168.1.0/24` |
+| `pen-ai sessions` | List sessions | `pen-ai sessions` |
+| `pen-ai tools` | List tools | `pen-ai tools` |
 
-### Engagement Options
-
-```bash
-# Basic engagement against an internal segment
-pen-ai 10.10.10.0/24
-
-# With a specific model
-pen-ai 10.10.10.0/24 --model mimo
-pen-ai 10.10.10.0/24 --model deepseek
-pen-ai 10.10.10.0/24 --model hy3
-
-# Resume a previous session
-pen-ai --resume 20260819_1430
-```
-
-### REPL Commands (inside interactive mode)
+### REPL Commands (Interactive Mode)
 
 ```
 RECON:
-  scan <target>          - Scan target (hosts + services)
+  scan <target>          - Scan target (auto: host discovery + service enum)
   enum                   - Enumerate all discovered services
+  map                    - Show network visualization
 
 EXPLOIT:
   exploit                - Auto-exploit all found services
@@ -95,148 +69,218 @@ EXPLOIT:
   crack                  - Crack found hashes
 
 POST-EXPLOIT:
+  privesc                - Attempt privilege escalation
+  loot                   - Harvest credentials and sensitive data
   pivot                  - Find and pivot to new networks
   shell <type>           - Generate reverse shell (bash/python/php)
 
+AUTO CHAINS:
+  auto                   - Full auto: scan → enum → exploit → privesc → pivot → loot
+  auto-recon             - Auto recon chain
+  auto-exploit           - Auto exploit chain
+  auto-post              - Auto post-exploit chain
+
 INFO:
-  state                  - Show current engagement state
+  dashboard              - Show engagement dashboard
   suggest                - Get attack suggestions
-  report                 - Show final report
+  report                 - Generate HTML + JSON report
+  creds                  - Show all discovered credentials
 
 SESSION:
   sessions               - List saved sessions
   resume <session_id>    - Resume previous session
-  set target <ip>        - Set target
+  replay                 - List replayable sessions
+  replay <session_id>    - Show session details
+  set target <ip>        - Set target (auto-scans)
 
 TOOLS:
   install <tool>         - Install a tool
-  run <command>          - Run any command
-  auto                   - Start autonomous mode (never stops)
+  run <command>          - Run any command (safety checked)
 
 OTHER:
-  help                   - Show help
+  help                   - Show this help
   exit / quit / q        - Exit (saves session)
+```
+
+---
+
+## 🔄 Three Operating Modes
+
+### 🔴 Mode 1: Full Autonomous (`freewill`)
+
+The LLM decides **everything**. No human input needed.
+
+```bash
+pen-ai freewill 10.10.10.0/24
+```
+
+**What happens:**
+1. LLM decides scan strategy → executes
+2. LLM analyzes results → decides next step
+3. LLM identifies vulnerabilities → picks exploits
+4. LLM exploits → evaluates success
+5. LLM post-exploits → harvests credentials
+6. LLM pivots → discovers new networks
+7. LLM generates report
+
+**No hardcoded rules. Pure LLM intelligence.**
+
+### 🟡 Mode 2: Semi-Automatic (`auto`)
+
+Tool runs the full chain automatically, you review results.
+
+```bash
+pen-ai auto 10.10.10.0/24
+```
+
+**What happens:**
+```
+[1/6] Auto-Scanning...        ✓ Found 5 hosts, 12 services
+[2/6] Auto-Enumerating...     ✓ Vulnerability checks complete
+[3/6] Auto-Exploiting...      ✓ 2 services exploited
+[4/6] Auto-PrivEsc...         ✓ Root access on 1 host
+[5/6] Auto-Pivoting...        ✓ 1 new network discovered
+[6/6] Auto-Reporting...       ✓ HTML report generated
+```
+
+### 🟢 Mode 3: Manual (Interactive REPL)
+
+You decide every step. Tool executes your commands.
+
+```bash
+pen-ai 10.10.10.0/24
+```
+
+```
+pen-ai:10.10.10.0 [0h 0s 0c] > scan 10.10.10.0/24
+pen-ai:10.10.10.0 [5h 12s 0c] > exploit
+pen-ai:10.10.10.0 [5h 12s 2c] [root] > privesc
+pen-ai:10.10.10.0 [5h 12s 2c] [admin] > loot
+pen-ai:10.10.10.0 [5h 12s 2c] [admin] > report
+```
+
+---
+
+## 🔄 Auto Chains
+
+### Full Auto Chain
+
+```bash
+# In REPL:
+auto
+
+# Or from CLI:
+pen-ai auto 10.10.10.0/24
+```
+
+**Chain flow:**
+```
+SCAN → ENUM → EXPLOIT → PRIVESC → PIVOT → LOOT → REPORT
+```
+
+Each step:
+- Runs automatically
+- Shows progress
+- Updates state
+- Continues to next step
+- Stops on completion or error
+
+### Auto Recon Chain
+
+```bash
+auto-recon
+```
+
+**Chain flow:**
+```
+HOST_DISCOVERY → PORT_SCAN → SERVICE_ENUM → OS_DETECT → VERSION_DETECT
+```
+
+### Auto Exploit Chain
+
+```bash
+auto-exploit
+```
+
+**Chain flow:**
+```
+FOR EACH SERVICE:
+  → CHECK_VULNERABILITY
+  → SELECT_EXPLOIT
+  → EXECUTE_EXPLOIT
+  → CHECK_SUCCESS
+  → RECORD_FINDING
+```
+
+### Auto Post-Exploit Chain
+
+```bash
+auto-post
+```
+
+**Chain flow:**
+```
+PRIVESC → LOOT → CREDENTIAL_HARVEST → PIVOT_DISCOVERY → NETWORK_SCAN
 ```
 
 ---
 
 ## 🗺️ Enterprise Coverage
 
-PEN-AI treats an internal network like a real one — starting from a foothold and working outward across zones, filtering, and trust boundaries.
-
 | Target Area | Capabilities |
 |-------------|--------------|
-| **Network** | Host discovery, controlled port/service scanning, OS detection, subnet/segment mapping, unreachable detection |
-| **Firewall / Filter Bypass** | Filter-mechanism identification (router ACL / firewall / iptables / device), ICMP-signature analysis, rule mapping, stateless weak-rule source-port bypass |
-| **Active Directory** | LDAP/SMB enumeration, kerberoasting, AS-REP roasting, DCSync, pass-the-hash, BloodHound attack paths |
-| **Web Applications** | Directory discovery, SQLi / XSS / command injection / LFI, JWT analysis, API enumeration, SQLMap |
-| **IoT / Specialty** | Device discovery, firmware acquisition & extraction, firmware analysis, hardcoded credential review, protocol analysis |
-| **Binary / Software** | checksec-style hardening checks, static & dynamic analysis, fuzzing, buffer-overflow / format-string exploit generation |
-| **Host / Privilege Escalation** | SUID, writable cron, kernel, credential hunting, LinPEAS-style enumeration |
-| **Post-Exploitation & Pivoting** | Persistent SSH sessions (connect once, exec many, auto-reconnect), credential harvesting, SOCKS/chisel pivots, lateral movement |
-
-### Go Deeper: Firewall & Filter Engine
-
-Segment-protected networks are where scanners fail. PEN-AI ships a dedicated filter-analysis stack (`recon/firewall_analysis.py`) that:
-
-1. **Detects** the filtering mechanism by interpreting responses — a TCP probe answered with **ICMP Type 3 Code 13 (Communication Administratively Prohibited)** is the classic signature of a Cisco router / stateless ACL.
-2. **Maps** filter rules: `closed` responses prove a host is live and routed behind the filter; `filtered` responses mean silent-drop. This both confirms reachability and flags misconfigurations (e.g. exposed ICMP-unreachable messages).
-3. **Bypasses** weak stateless rules with source-port spoofing (`-g 20` to mimic an active-FTP data channel, or `53`/`67`/`68`), then diffs baseline vs. bypass to reveal newly-visible attack surface.
-
-```bash
-# In the interactive REPL, run a controlled scan then let the agent classify it:
-#   pen-ai 10.10.20.5            (start REPL targeting the segment)
-#   run nmap -Pn -sS -T1 --max-retries 1 -p 1-100 10.10.20.5
-
-# The agent's tool registry exposes the analysis directly:
-#   filter_detect            -> identify the filtering mechanism (router/fw/iptables/device)
-#   filter_rule_map          -> which ports pass (open/closed) vs. dropped (filtered)
-#   filter_sourceport_bypass -> re-scan from a spoofed source port (e.g. -g 20) and diff
-```
+| **Network** | Host discovery, port/service scanning, OS detection, subnet mapping |
+| **Firewall / Filter** | Filter detection, ICMP analysis, source-port bypass |
+| **Active Directory** | LDAP/SMB enum, kerberoasting, DCSync, pass-the-hash |
+| **Web Applications** | SQLi, XSS, command injection, LFI, API enum |
+| **IoT** | Device discovery, firmware analysis, protocol testing |
+| **Binary** | checksec, static/dynamic analysis, buffer overflow |
+| **Host** | SUID, cron, kernel exploits, credential hunting |
+| **Post-Exploit** | SSH sessions, credential harvesting, SOCKS pivots |
 
 ---
 
-## 🔄 Engagement Lifecycle (All LLM-Decided)
+## 🔄 Engagement Lifecycle
 
 ```
-1. RECON          LLM decides scan strategy (nmap/masscan/rustscan, flags, ports)
-2. ENUMERATE      LLM picks enumeration tools per discovered service
-3. FILTER ANALYZE LLM analyzes filtering and decides bypass approach
-4. IDENTIFY       LLM reasons about vulnerabilities (no fixed CVE list)
-5. EXPLOIT        LLM selects exploitation tools and payloads
-6. POST-EXPLOIT   LLM explores compromised host (GTFOBins, kernel, config)
-7. PIVOT          LLM discovers routes and chooses pivoting method
-8. LOOT           LLM harvests credentials and sensitive data
-9. REPORT         LLM writes findings with CVSS scoring
+1. RECON          LLM decides scan strategy
+2. ENUMERATE      LLM picks enumeration tools
+3. FILTER ANALYZE LLM analyzes filtering
+4. IDENTIFY       LLM reasons about vulnerabilities
+5. EXPLOIT        LLM selects exploitation tools
+6. POST-EXPLOIT   LLM explores compromised host
+7. PIVOT          LLM discovers routes
+8. LOOT           LLM harvests credentials
+9. REPORT         LLM writes findings
 ```
 
-**No phase is forced.** The LLM skips phases that don't apply and revisits phases when new information emerges. The engagement adapts to what's discovered, not a predetermined sequence.
-
----
-
-## ⚙️ DeepEngage: One-Shot Chained Engagement
-
-The `deep_engage` tool runs the entire zero-to-advanced lifecycle against a target in one call:
-
-```
-RECON → FILTER_ANALYZE → ENUMERATE → EXPLOIT → POST_EXPLOIT → PIVOT → REPORT
-```
-
-- **RECON** — host discovery + port/service scan
-- **FILTER_ANALYZE** — identifies the firewall/filter in front of the target and records it as a finding
-- **ENUMERATE** — records observed services (no hardcoded risk ratings — LLM decides what's important)
-- **EXPLOIT** — attempts every open service via the exploit modules and promotes access on success
-- **POST_EXPLOIT** — documents the beachhead and harvested credentials
-- **PIVOT** — records pivot points once access is held
-- **REPORT** — writes Markdown + JSON report artifacts to `reports/`
-
-```python
-from core.orchestrator.pipeline import DeepEngagePipeline
-
-async def go():
-    payload = await DeepEngagePipeline(target="10.10.20.5").run()
-    print(payload["artifacts"])  # paths to report.md / report.json
-```
-
-The pipeline's scan/filter/exploit runners are injectable (sync or async), so it runs end-to-end offline in tests and degrades gracefully on hosts without the Kali toolchain.
+**No phase is forced.** The LLM adapts to what's discovered.
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-                       MASTER AI AGENT
-            (LLM: MiMo/DeepSeek/Hy3 -> Reasoning -> Tool Calling)
-                              |
-            +-----------------+-----------------+
-            |                 |                 |
-            v                 v                 v
-   Engagement State    Knowledge RAG        Tool Registry
-   (Digital Twin)      (ChromaDB)           (recon/exploit/
-                                             post-exploit/
-                                             pivoting/filter)
-                              |
-   +------------+------------+------------+------------+
-   |            |            |            |            |
-   v            v            v            v            v
- ACTIVE DIR    WEB         BINARY         IOT        HOST TARGETS
- (kerberoast,  (sqli,      (reverse       (firmware   (privesc,
-  dcsync, pth)  xss, lfi)   engineering)   analysis)   lateral)
+┌─────────────────────────────────────────────────────┐
+│                    LLM (MiMo/DeepSeek/Hy3)          │
+│              Decides EVERYTHING                      │
+└──────────────────────┬──────────────────────────────┘
+                       │
+         ┌─────────────┼─────────────┐
+         │             │             │
+         ▼             ▼             ▼
+    ┌─────────┐  ┌──────────┐  ┌──────────┐
+    │ Scanner │  │ Exploiter│  │ Reporter │
+    │ (nmap)  │  │ (hydra)  │  │ (HTML)   │
+    └─────────┘  └──────────┘  └──────────┘
+         │             │             │
+         └─────────────┼─────────────┘
+                       │
+              ┌────────▼────────┐
+              │ Engagement State│
+              │ (Digital Twin)  │
+              └─────────────────┘
 ```
-
-Two complementary operating modes:
-
-- **Structured `MasterAgent`** — a disciplined planner/reasoner/registry loop with **Rules-of-Engagement scope validation** and approval gates. Best for controlled, authorized engagements.
-- **Autonomous `RelentlessAgent`** — an LLM-driven terminal operator with full tool control, installs what it needs, and keeps going until stopped. Best when maximum adaptability is required (use only within authorized scope).
-
----
-
-## 🌐 Environment & Required Tools
-
-- **OS:** Kali Linux (or any Linux with the toolchain below). The shell-outs use `apt-get`, `which`, `/tmp`, `sshpass`, `smbclient`, `nmap`, etc., so a Windows host is **not** the runtime target.
-- **LLM API:** a reasoning model (MiMo / DeepSeek / Hy3 via an OpenAI-compatible endpoint, default `https://opencode.ai/zen/v1`). Without a key, PEN-AI falls back to built-in heuristic commands (reduced "freewill").
-- **Recommended tooling** (auto-usable if installed): `nmap`, `sshpass`, `smbclient`, `crackmapexec`, `impacket`, `bloodhound-python`, `sqlmap`, `hydra`, `searchsploit`, `metasploit`, `john`/`hashcat`, `linpeas`, `chisel`, `binwalk`, `gdb`/`pwndbg`/`radare2`.
-- **Neo4j (optional)** — BloodHound attack-path queries (`enterprise/bloodhound_queries.py`) auto-connect via `BLOODHOUND_URI`/`BLOODHOUND_USER`/`BLOODHOUND_PASSWORD` env vars, or `bolt://localhost:7687` with `neo4j`/`bloodhound` defaults; return empty results when offline.
 
 ---
 
@@ -245,38 +289,19 @@ Two complementary operating modes:
 ### .env File
 
 ```env
-# PEN-AI Configuration
 PENAI_LLM_MODEL=mimo-v2.5-free
 PENAI_LLM_BASE_URL=https://opencode.ai/zen/v1
 PENAI_LLM_API_KEY=
 PENAI_LLM_TEMPERATURE=0.3
 PENAI_LLM_MAX_TOKENS=8192
-PENAI_LLM_TIMEOUT=120
-PENAI_RECON_MAX_THREADS=10
-PENAI_SCOPE_MAX_PIVOTS=3
-PENAI_SCOPE_REQUIRE_APPROVAL=false
 ```
-
-> `.env` and the local RAG store are git-ignored — never commit real API keys or target data.
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-# Run all tests
 pytest tests/ -v
-
-# Run specific suites
-pytest tests/test_core.py -v
-pytest tests/test_llm.py -v
-pytest tests/test_exploits.py -v
-pytest tests/test_rag.py -v
-pytest tests/test_parallel_recon.py -v
-pytest tests/test_firewall.py -v   # firewall/filter analysis engine
-
-# Run with coverage
-pytest tests/ --cov=pen-ai --cov-report=html
 ```
 
 Current suite: **208 tests** (all passing).
@@ -288,69 +313,41 @@ Current suite: **208 tests** (all passing).
 ```
 pen-ai/
 ├── app/
-│   ├── cli/main.py              # Typer CLI
-│   ├── terminal/
-│   │   ├── ui.py                # Rich terminal UI
-│   │   └── repl.py              # Interactive REPL
-│   └── config/                  # Settings, model registry, loader
+│   ├── cli/main.py              # CLI (freewill, auto, scan, sessions, tools)
+│   └── terminal/repl.py         # Interactive REPL with 3 modes
 ├── ai/
-│   ├── master_agent.py          # Structured orchestrator (RoE-validated)
-│   ├── relentless_agent.py      # Autonomous continuous operator
-│   ├── planner.py               # Action generation
-│   ├── reasoner.py              # Hypothesis generation
-│   ├── memory.py                # 3-level memory
-│   ├── llm_client.py            # LLM API client + tool calling
-│   ├── sessions.py              # Persistent paramiko SSH session manager
-│   └── tool_registry.py         # Dynamic tool registry
+│   ├── freewill_agent.py        # Full autonomous LLM-driven agent
+│   ├── autonomous_agent.py      # Core agent logic
+│   ├── brain.py                 # Observation layer (no hardcoded rules)
+│   ├── planner.py               # Action generation (no fixed tools)
+│   ├── credential_manager.py    # Credential tracking
+│   └── llm_client.py            # LLM API client
 ├── core/
-│   ├── state/engagement_state.py # Digital twin of the network
-│   ├── scope/rules.py           # Rules of Engagement enforcement
-│   ├── events/models.py         # Event system
-│   └── orchestrator/
-│       ├── main.py              # Engagement loop
-│       └── pipeline.py          # DeepEngage: zero-to-advanced chained pipeline
-│   └── utils/shell.py           # Safe shell command builders (quoting)
+│   ├── state/engagement_state.py
+│   ├── safety.py                # Command safety checks
+│   ├── session_replay.py        # Session replay
+│   └── orchestrator/pipeline.py
 ├── recon/
-│   ├── network.py               # Host discovery, port/service scan
-│   ├── parallel.py              # Parallel scanning
-│   └── firewall_analysis.py     # Filter detection, rule mapping, source-port bypass
-├── ranges/
-│   ├── ad/agent.py              # Active Directory attacks
-│   ├── web/agent.py             # Web app testing
-│   ├── binary/agent.py          # Binary exploitation / RE
-│   ├── iot/agent.py             # IoT / firmware
-│   └── ctf/agent.py             # Host / web-based targets (Linux & web misconfigs)
+│   ├── network.py               # Host/port scanning
+│   ├── network_viz.py           # ASCII network maps
+│   └── firewall_analysis.py     # Filter detection
 ├── exploitation/
-│   ├── modules/                 # ssh, smb, web, privesc exploits
-│   ├── orchestrator.py          # Exploit orchestrator
+│   ├── modules/                 # ssh, smb, web, privesc
 │   └── engine.py                # Exploitation engine
-├── enterprise/tools.py          # MSF, CrackMapExec, BloodHound, SQLMap, Hydra, LinPEAS, Chisel
-├── enterprise/bloodhound_queries.py  # Neo4j attack-path Cypher queries
-├── post_exploitation/engine.py   # Post-access actions
-├── pivoting/manager.py           # Pivot management
-├── objectives/tracker.py
-├── evidence/collector.py
-├── attack_graph/graph.py
-├── findings/engine.py
-├── reporting/generator.py        # CVSS v3.1 auto-scored findings
-├── reporting/cvss.py             # CVSS v3.1 scoring engine
-├── knowledge/
-│   ├── methodology_data.py       # Enterprise pentest knowledge base
-│   └── rag.py                    # ChromaDB RAG
-└── tests/                        # 208 tests (all passing)
+├── reporting/
+│   ├── html_report.py           # HTML report generation
+│   ├── generator.py
+│   └── cvss.py                  # CVSS scoring
+└── tests/                       # 208 tests
 ```
 
 ---
 
-## 🛡️ Responsible Use & Authorization
+## 🛡️ Responsible Use
 
-PEN-AI is a full-featured enterprise penetration testing operator. **You may only use it against systems you own or systems for which you have explicit, written authorization (e.g., an authorized internal engagement/scope of work).**
+**Only use against systems you own or have written authorization to test.**
 
-- Define your **scope and Rules of Engagement** before starting (`core/scope/rules.py` enforces this in structured mode).
-- The autonomous ("never stop") mode will aggressively discover and move — **point it only at in-scope targets**.
-- Anything you discover is evidence for a defensive report, not for misuse.
-
-Unauthorized scanning or access is illegal in most jurisdictions and can carry criminal penalties. You — the operator — are responsible for staying within scope and applicable law.
+Unauthorized access is illegal. Stay in scope.
 
 ---
 
@@ -360,10 +357,4 @@ MIT License
 
 ---
 
-## 🤝 Contributing
-
-Contributions welcome! See CONTRIBUTING.md for guidelines.
-
----
-
-**Built for authorized enterprise internal penetration testing.** Stay in scope. Report clearly.
+**Built for authorized enterprise penetration testing.** Stay in scope. Report clearly.

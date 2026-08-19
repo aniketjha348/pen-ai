@@ -28,6 +28,7 @@ from ai.context_compressor import ContextCompressor
 from ai.credential_cracker import CredentialCracker
 from ai.shell_generator import ShellGenerator
 from ai.credential_manager import CredentialManager
+from ai.auto_chains import FullAutoChain, ReconChain, ExploitChain, PostExploitChain
 from core.session import SessionManager
 from core.safety import SafetyChecker
 from core.session_replay import SessionReplay
@@ -121,7 +122,13 @@ class PenAIRepl:
                 elif user_input.lower() == "report":
                     self._cmd_report()
                 elif user_input.lower() == "auto":
-                    await self._cmd_auto()
+                    await self._cmd_auto_chain()
+                elif user_input.lower() == "auto-recon":
+                    await self._cmd_auto_recon()
+                elif user_input.lower() == "auto-exploit":
+                    await self._cmd_auto_exploit()
+                elif user_input.lower() == "auto-post":
+                    await self._cmd_auto_post()
                 elif user_input.lower() == "loot":
                     await self._cmd_loot()
                 elif user_input.lower() == "privesc":
@@ -219,7 +226,12 @@ class PenAIRepl:
   \033[93mTOOLS:\033[0m
     install <tool>         - Install a tool
     run <command>          - Run any command
-    auto                   - Start autonomous mode (never stops)
+
+  \033[91mAUTO CHAINS:\033[0m
+    auto                   - Full auto: scan → enum → exploit → privesc → pivot → loot
+    auto-recon             - Auto recon chain
+    auto-exploit           - Auto exploit chain
+    auto-post              - Auto post-exploit chain
 
   \033[90mOTHER:\033[0m
     help                   - Show this help
@@ -738,6 +750,70 @@ class PenAIRepl:
                         self.failed.add(cmd)
 
             self.session_mgr.auto_save(self._get_state(), self.session_id, interval_cycles=5)
+
+    async def _cmd_auto_chain(self):
+        """Run full auto chain: scan → enum → exploit → privesc → pivot → loot."""
+        chain = FullAutoChain(self.executor)
+        result = await chain.run(self.target)
+
+        # Update REPL state from chain result
+        self.hosts = result.get("hosts", [])
+        self.services = result.get("services", {})
+        self.access_map = result.get("access", {})
+        self.credentials = result.get("credentials", [])
+        self.pivoted = result.get("pivoted", [])
+
+        # Add loot to credentials
+        loot = result.get("loot", {})
+        for shadow in loot.get("shadow", []):
+            self.credentials.append({"type": "shadow_hash", "value": shadow.get("hash", ""), "username": shadow.get("user", "")})
+
+        self._cmd_dashboard()
+        self._cmd_report()
+
+    async def _cmd_auto_recon(self):
+        """Run auto recon chain."""
+        chain = ReconChain(self.executor, self.state)
+        result = await chain.run(self.target)
+        self.hosts = result.get("hosts", [])
+        self.services = result.get("services", {})
+        print(NetworkVisualizer.visualize_compact(self.hosts, self.services, self.access_map))
+
+    async def _cmd_auto_exploit(self):
+        """Run auto exploit chain."""
+        if not self.services:
+            print("  No services found. Run 'scan' or 'auto-recon' first.")
+            return
+        chain = ExploitChain(self.executor, self.state)
+        result = await chain.run(self.services)
+        self.access_map.update(result.get("access", {}))
+        self.credentials.extend(result.get("credentials", []))
+        self._cmd_dashboard()
+
+    async def _cmd_auto_post(self):
+        """Run auto post-exploit chain."""
+        if not self.access_map:
+            print("  No access yet. Run 'exploit' first.")
+            return
+        chain = PostExploitChain(self.executor, self.state)
+        result = await chain.run(self.access_map, self.credentials)
+        self.pivoted.extend(result.get("new_networks", []))
+        loot = result.get("loot", {})
+        for shadow in loot.get("shadow", []):
+            self.credentials.append({"type": "shadow_hash", "value": shadow.get("hash", ""), "username": shadow.get("user", "")})
+        self._cmd_dashboard()
+
+    @property
+    def state(self):
+        return {
+            "hosts": self.hosts,
+            "services": self.services,
+            "credentials": self.credentials,
+            "access_map": self.access_map,
+            "pivoted": self.pivoted,
+            "failed": list(self.failed),
+            "commands_run": self.commands_run,
+        }
 
     def _cmd_suggest(self):
         effective_hosts = self.hosts or list(self.services.keys())
