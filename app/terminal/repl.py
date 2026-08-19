@@ -7,6 +7,9 @@ Enhanced with:
 - Smarter exploitation
 - HTML report generation
 - Network visualization
+- Credential management
+- Safety checks
+- Session replay
 - Better UX
 """
 
@@ -24,7 +27,10 @@ from ai.streaming import StreamPrinter
 from ai.context_compressor import ContextCompressor
 from ai.credential_cracker import CredentialCracker
 from ai.shell_generator import ShellGenerator
+from ai.credential_manager import CredentialManager
 from core.session import SessionManager
+from core.safety import SafetyChecker
+from core.session_replay import SessionReplay
 from reporting.html_report import HTMLReportGenerator
 from recon.network_viz import NetworkVisualizer
 
@@ -39,7 +45,7 @@ class PenAIRepl:
 \033[91m██║╚██╗██║██╔══╝   ██╔██╗ ██║   ██║╚════██║
 \033[91m██║ ╚████║███████╗██╔╝ ╚██╗╚██████╔╝███████║
 \033[91m╚═╝  ╚═══╝╚══════╝╚═╝   ╚═╝ ╚═════╝ ╚══════╝
-\033[0m  Autonomous Penetration Testing Agent v2.0
+\033[0m  Autonomous Penetration Testing Agent v2.1
   Type 'help' for commands. Ctrl+C to exit.
 """
 
@@ -51,12 +57,14 @@ class PenAIRepl:
         self.shells = ShellGenerator()
         self.session_mgr = SessionManager()
         self.decision_engine = DecisionEngine()
+        self.cred_manager = CredentialManager()
+        self.session_replay = SessionReplay()
         self.llm = llm
 
         # State
         self.target = ""
         self.hosts = []
-        self.services = {}  # host: [services]
+        self.services = {}
         self.credentials = []
         self.access_map = {}
         self.pivoted = []
@@ -120,8 +128,19 @@ class PenAIRepl:
                     await self._cmd_privesc()
                 elif user_input.lower() == "map":
                     self._cmd_network_map()
+                elif user_input.lower() == "creds":
+                    self._cmd_creds()
+                elif user_input.lower() == "replay":
+                    self._cmd_replay_list()
+                elif user_input.lower().startswith("replay "):
+                    self._cmd_replay(user_input[7:].strip())
                 elif user_input.lower().startswith("set target "):
-                    self.target = user_input[11:].strip()
+                    target = user_input[11:].strip()
+                    valid, msg = SafetyChecker.validate_target(target)
+                    if not valid:
+                        print(f"  \033[91m✗ {msg}\033[0m")
+                        continue
+                    self.target = target
                     print(f"  \033[92m✓ Target set: {self.target}\033[0m")
                     print(f"  \033[90mAuto-scanning target...\033[0m")
                     await self._cmd_scan(self.target)
@@ -188,10 +207,13 @@ class PenAIRepl:
     state                  - Show current engagement state (alias)
     suggest                - Get attack suggestions
     report                 - Generate HTML + JSON report
+    creds                  - Show all discovered credentials
 
   \033[95mSESSION:\033[0m
     sessions               - List saved sessions
     resume <session_id>    - Resume previous session
+    replay                 - List replayable sessions
+    replay <session_id>    - Show session details
     set target <ip>        - Set target (auto-scans)
 
   \033[93mTOOLS:\033[0m
@@ -248,9 +270,40 @@ class PenAIRepl:
         print(f"{'='*60}")
 
     def _cmd_network_map(self):
-        """Show network visualization."""
         print(NetworkVisualizer.visualize(self.hosts, self.services, self.access_map, self.pivoted))
         print(NetworkVisualizer.visualize_services_table(self.services))
+
+    def _cmd_creds(self):
+        """Show all credentials."""
+        # Sync with credential manager
+        for c in self.credentials:
+            self.cred_manager.add(
+                username=c.get("username", ""),
+                password=c.get("password", c.get("value", "")),
+                credential_type=c.get("type", "password"),
+                target=self.target,
+            )
+        print(self.cred_manager.summary())
+
+    def _cmd_replay_list(self):
+        """List replayable sessions."""
+        sessions = self.session_replay.list_sessions()
+        if not sessions:
+            print("  No saved sessions.")
+            return
+
+        print("\n  \033[1m📋 REPLAYABLE SESSIONS:\033[0m")
+        print(f"  {'─'*60}")
+        print(f"  {'ID':<20} {'Target':<15} {'Hosts':<8} {'Creds':<8}")
+        print(f"  {'─'*60}")
+        for s in sessions:
+            print(f"  {s['session_id']:<20} {s['target']:<15} {s['hosts']:<8} {s['credentials']:<8}")
+        print(f"  {'─'*60}")
+        print(f"  Usage: replay <session_id>")
+
+    def _cmd_replay(self, session_id: str):
+        """Show session details."""
+        print(self.session_replay.get_session_summary(session_id))
 
     async def _cmd_scan(self, target: str):
         self.target = target
@@ -292,10 +345,7 @@ class PenAIRepl:
         print(f"  Hosts: {len(self.hosts)} | Services: {total_svcs}")
 
         self._show_attack_plan()
-
-        # Show network map
         print(NetworkVisualizer.visualize_compact(self.hosts, self.services, self.access_map))
-
         self.session_mgr.auto_save(self._get_state(), self.session_id)
 
     def _show_attack_plan(self):
@@ -601,7 +651,6 @@ class PenAIRepl:
         report.start_time = self.start_time
         report.end_time = datetime.now()
 
-        # Add findings based on state
         for host, level in self.access_map.items():
             report.add_finding(
                 title=f"Access gained on {host}",
@@ -623,7 +672,6 @@ class PenAIRepl:
                 description=f"Discovered network segment {net} through pivoting",
             )
 
-        # Save reports
         import tempfile
         report_dir = os.path.join(tempfile.gettempdir(), f"penai_{self.session_id}")
         os.makedirs(report_dir, exist_ok=True)
@@ -638,7 +686,6 @@ class PenAIRepl:
         print(f"    HTML: {html_file}")
         print(f"    JSON: {json_file}")
 
-        # Also save basic JSON
         basic_report = {
             "session_id": self.session_id,
             "target": self.target,
@@ -755,6 +802,12 @@ class PenAIRepl:
             print(f"  \033[91m✗ Engine error: {e}\033[0m")
 
     async def _cmd_run(self, command: str):
+        # Safety check
+        is_safe, reason = SafetyChecker.is_safe(command)
+        if not is_safe:
+            print(f"  \033[91m✗ BLOCKED: {reason}\033[0m")
+            return
+
         print(f"  $ {command}")
         result = await self.executor.run(command, timeout=300)
         self.commands_run.append(command)
@@ -840,6 +893,7 @@ class PenAIRepl:
     async def _cmd_exit(self):
         state = self._get_state()
         self.session_mgr.save(state, self.session_id)
+        self.cred_manager.save()
         print(f"  Session saved: {self.session_id}")
 
     def _parse_output(self, command: str, stdout: str, stderr: str):
@@ -863,11 +917,15 @@ class PenAIRepl:
             if svc_info not in self.services[host]:
                 self.services[host].append(svc_info)
 
-        pw_matches = re.findall(r"password[=:]\s*(\S+)", output, re.IGNORECASE)
-        for pw in pw_matches:
-            if not any(c.get("value") == pw for c in self.credentials):
-                self.credentials.append({"type": "password", "value": pw})
-                print(f"  \033[91m🔑 PASSWORD: {pw}\033[0m")
+        # Extract credentials using manager
+        new_creds = self.cred_manager.add_from_output(output, target=self.target)
+        for cred in new_creds:
+            self.credentials.append({
+                "type": cred.credential_type,
+                "value": cred.password or cred.hash_value,
+                "username": cred.username,
+            })
+            print(f"  \033[91m🔑 {cred.credential_type}: {cred.username}: {cred.password or cred.hash_value[:30]}\033[0m")
 
         if "uid=0" in output:
             for h in self.hosts:
