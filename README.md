@@ -14,7 +14,7 @@ Covers the full internal-engagement attack surface: **network**, **Active Direct
 
 Most automated scanners stop at "find an open port." PEN-AI is built as an **adversary, not a scanner**:
 
-- **Adaptive, not scripted** — no fixed attack chains. It observes, builds a model of the network, generates hypotheses, and re-plans as it learns.
+- **Fully LLM-driven, zero hardcoded rules** — the LLM decides every action: which scan tools to use, which attacks to attempt, which post-exploit paths to explore. No fixed attack chains, no hardcoded tool mappings, no preset vulnerability lists.
 - **Zero-to-advanced lifecycle** — host discovery → deep enumeration → filter/firewall bypass → exploitation → post-exploitation → privilege escalation → lateral movement → pivoting → objective completion → reporting.
 - **Works against hardened networks** — understands ICMP filtering, rate limiting, stateless ACLs, and firewall misconfigurations, and adjusts scanning vigor accordingly.
 - **Full attack-surface coverage** — one operator across AD, web, binary, IoT, and host targets, with enterprise tool integration (Metasploit, CrackMapExec, BloodHound, SQLMap, Hydra, LinPEAS, Chisel...).
@@ -179,35 +179,35 @@ Segment-protected networks are where scanners fail. PEN-AI ships a dedicated fil
 
 ---
 
-## 🔄 Engagement Lifecycle
+## 🔄 Engagement Lifecycle (All LLM-Decided)
 
 ```
-1. RECON          Discover hosts, ports, segments — adapt to ICMP/rate filtering
-2. ENUMERATE      Deep-dive every relevant service (AD, web, IoT, files)
-3. FILTER ANALYZE Identify & bypass firewalls/filters between you and the target
-4. IDENTIFY       Convert findings into prioritized attack vectors
-5. EXPLOIT        Gain access (credentials, injection, binary, service)
-6. POST-EXPLOIT   Enumerate the compromised host, escalate privileges
-7. PIVOT          Move to adjacent segments / trust boundaries
-8. LOOT           Harvest credentials, secrets, keys, sensitive data
-9. REPORT         Produce structured findings + executive summary
+1. RECON          LLM decides scan strategy (nmap/masscan/rustscan, flags, ports)
+2. ENUMERATE      LLM picks enumeration tools per discovered service
+3. FILTER ANALYZE LLM analyzes filtering and decides bypass approach
+4. IDENTIFY       LLM reasons about vulnerabilities (no fixed CVE list)
+5. EXPLOIT        LLM selects exploitation tools and payloads
+6. POST-EXPLOIT   LLM explores compromised host (GTFOBins, kernel, config)
+7. PIVOT          LLM discovers routes and chooses pivoting method
+8. LOOT           LLM harvests credentials and sensitive data
+9. REPORT         LLM writes findings with CVSS scoring
 ```
 
-PEN-AI does not assume a flat network. It expects segmentation, filtering, and defensive awareness — and is built to work *through* them.
+**No phase is forced.** The LLM skips phases that don't apply and revisits phases when new information emerges. The engagement adapts to what's discovered, not a predetermined sequence.
 
 ---
 
 ## ⚙️ DeepEngage: One-Shot Chained Engagement
 
-The `deep_engage` tool runs the entire zero-to-advanced lifecycle against a target in one call — no LLM required, deterministic, and testable:
+The `deep_engage` tool runs the entire zero-to-advanced lifecycle against a target in one call:
 
 ```
 RECON → FILTER_ANALYZE → ENUMERATE → EXPLOIT → POST_EXPLOIT → PIVOT → REPORT
 ```
 
 - **RECON** — host discovery + port/service scan
-- **FILTER_ANALYZE** — identifies the firewall/filter in front of the target and records it as a finding (e.g. ICMP Type 3 Code 13 → Cisco/stateless ACL)
-- **ENUMERATE** — flags risky services (FTP, telnet, SNMP, etc.) as vulnerabilities
+- **FILTER_ANALYZE** — identifies the firewall/filter in front of the target and records it as a finding
+- **ENUMERATE** — records observed services (no hardcoded risk ratings — LLM decides what's important)
 - **EXPLOIT** — attempts every open service via the exploit modules and promotes access on success
 - **POST_EXPLOIT** — documents the beachhead and harvested credentials
 - **PIVOT** — records pivot points once access is held
@@ -303,7 +303,7 @@ pytest tests/test_firewall.py -v   # firewall/filter analysis engine
 pytest tests/ --cov=pen-ai --cov-report=html
 ```
 
-Current suite: **207 tests** (2 Windows-specific autonomous-executor tests fail only on non-Linux hosts).
+Current suite: **208 tests** (all passing).
 
 ---
 
