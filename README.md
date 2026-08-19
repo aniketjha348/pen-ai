@@ -274,7 +274,7 @@ pytest tests/test_firewall.py -v   # firewall/filter analysis engine
 pytest tests/ --cov=pen-ai --cov-report=html
 ```
 
-Current suite: **180 tests** (2 Windows-specific autonomous-executor tests fail only on non-Linux hosts).
+Current suite: **185 tests** (2 Windows-specific autonomous-executor tests fail only on non-Linux hosts).
 
 ---
 
@@ -300,7 +300,9 @@ pen-ai/
 │   ├── state/engagement_state.py # Digital twin of the network
 │   ├── scope/rules.py           # Rules of Engagement enforcement
 │   ├── events/models.py         # Event system
-│   └── orchestrator/main.py     # Engagement loop
+│   └── orchestrator/
+│       ├── main.py              # Engagement loop
+│       └── pipeline.py          # DeepEngage: zero-to-advanced chained pipeline
 ├── recon/
 │   ├── network.py               # Host discovery, port/service scan
 │   ├── parallel.py              # Parallel scanning
