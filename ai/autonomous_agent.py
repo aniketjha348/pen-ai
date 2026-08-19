@@ -174,7 +174,7 @@ Based on this output, what should I do next? Give me the exact command."""
         print(f"Scope: {self.scope}")
         print(f"{'='*60}\n")
 
-        max_cycles = 50
+        max_cycles = 500  # effectively unlimited (was 50)
         cycle = 0
 
         while cycle < max_cycles:

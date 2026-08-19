@@ -14,7 +14,7 @@ async def run_engagement(
     model: str = "mimo",
     api_key: str = "",
     base_url: str = "",
-    max_cycles: int = 50,
+    max_cycles: int = 500,
 ):
     """Run an autonomous engagement. The LLM decides everything."""
 

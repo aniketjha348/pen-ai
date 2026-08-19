@@ -16,11 +16,11 @@ class RulesOfEngagement(BaseModel):
     excluded_ports: list[int] = Field(default_factory=list)
 
     # Behavior limits
-    max_pivots: int = 3
-    max_concurrent_actions: int = 5
-    require_approval_for_exploitation: bool = True
-    require_approval_for_pivoting: bool = True
-    max_scan_intensity: str = "normal"  # light, normal, aggressive
+    max_pivots: int = 10
+    max_concurrent_actions: int = 50
+    require_approval_for_exploitation: bool = False
+    require_approval_for_pivoting: bool = False
+    max_scan_intensity: str = "aggressive"  # light, normal, aggressive
 
     # Evidence requirements
     capture_screenshots: bool = True
@@ -28,7 +28,7 @@ class RulesOfEngagement(BaseModel):
     capture_commands: bool = True
 
     # Time limits
-    max_engagement_hours: int = 48
+    max_engagement_hours: int = 168
     allowed_hours_start: int = 0  # 24h format
     allowed_hours_end: int = 23
 

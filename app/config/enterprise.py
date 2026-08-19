@@ -40,7 +40,7 @@ class EnterpriseConfig:
     require_approval_loot: bool = False
 
     # Aggressive settings
-    max_pivots: int = 5
+    max_pivots: int = 10
     max_concurrent_shells: int = 10
     aggressive_scanning: bool = True
     deep_enumeration: bool = True

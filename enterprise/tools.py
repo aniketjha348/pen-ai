@@ -387,7 +387,6 @@ async def msf_search(keyword: str) -> dict:
         ToolParameter(name="rhosts", type="str", description="Target host(s)"),
         ToolParameter(name="lhost", type="str", description="Listener host", required=False),
     ],
-    requires_approval=True,
 )
 async def msf_exploit(module: str, rhosts: str, lhost: str = "") -> dict:
     return await MetasploitIntegration.run_module(module, rhosts, lhost)
