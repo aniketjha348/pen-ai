@@ -133,7 +133,7 @@ class SSHSessionManager:
         ]
 
 
-SESSION_MANAGER = SSHSessionManager()
+SSH_SESSION_MANAGER = SSHSessionManager()
 
 
 @register_tool(
@@ -149,7 +149,7 @@ SESSION_MANAGER = SSHSessionManager()
     ],
 )
 async def ssh_session_exec(host: str, username: str, password: str, command: str, port: int = 22) -> dict:
-    out, code = await SESSION_MANAGER.exec_on(host, username, password, command, port)
+    out, code = await SSH_SESSION_MANAGER.exec_on(host, username, password, command, port)
     return {"success": code == 0, "output": out, "exit_code": code, "persistent": True}
 
 
@@ -160,4 +160,4 @@ async def ssh_session_exec(host: str, username: str, password: str, command: str
     parameters=[],
 )
 async def session_status() -> dict:
-    return {"sessions": SESSION_MANAGER.list_sessions()}
+    return {"sessions": SSH_SESSION_MANAGER.list_sessions()}

@@ -7,6 +7,8 @@ from enum import Enum
 from typing import Any, Optional
 from uuid import UUID, uuid4
 
+from ai.sessions import SSH_SESSION_MANAGER
+
 
 class PivotMethod(str, Enum):
     """Methods for establishing pivots."""
@@ -277,7 +279,12 @@ class PivotManager:
             if pivot.status == PivotStatus.ACTIVE:
                 await self.close_pivot(pivot.id)
                 count += 1
+        count += await SSH_SESSION_MANAGER.close_all()
         return count
+
+    async def close_all_sessions(self) -> int:
+        """Close all persistent SSH sessions opened during pivoting."""
+        return await SSH_SESSION_MANAGER.close_all()
 
     async def establish_double_pivot(
         self,
