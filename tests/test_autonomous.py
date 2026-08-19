@@ -116,10 +116,28 @@ Then enumerate services."""
 
     def test_extract_inline_commands(self):
         agent = AutonomousAgent()
-        response = "I'll run this: nmap -sV -sC 10.10.10.1"
+        # Test extraction from code blocks
+        response = """Analysis:
+```bash
+nmap -sV -sC 10.10.10.1
+```
+Next steps above."""
         commands = agent._extract_commands(response)
         assert len(commands) >= 1
         assert any("nmap" in c for c in commands)
+
+    def test_extract_inline_shell_lines(self):
+        agent = AutonomousAgent()
+        # Test extraction of lines that look like shell commands
+        response = """Run these commands:
+nmap -sn 10.10.10.0/24
+gobuster dir -u http://10.10.10.1 -w wordlist.txt
+# This is a comment
+"""
+        commands = agent._extract_commands(response)
+        assert len(commands) >= 2
+        assert any("nmap" in c for c in commands)
+        assert any("gobuster" in c for c in commands)
 
     def test_is_safe_command(self):
         agent = AutonomousAgent()

@@ -1,4 +1,8 @@
-"""Planner - Generates and ranks candidate actions."""
+"""Planner - Generates and ranks candidate actions.
+
+No hardcoded tool assignments. The LLM decides what tools to use.
+This module provides contextual action suggestions based on current state.
+"""
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -67,7 +71,11 @@ class CandidateAction:
 
 
 class Planner:
-    """Generates and ranks candidate actions based on current state."""
+    """Generates and ranks candidate actions based on current state.
+
+    No hardcoded tool assignments - the LLM decides what tools to use
+    based on the action context and current state.
+    """
 
     def __init__(self):
         self._history: list[CandidateAction] = []
@@ -78,121 +86,77 @@ class Planner:
         memory: Any,
         available_tools: list[str],
     ) -> list[CandidateAction]:
-        """Generate candidate actions based on current state."""
+        """Generate candidate actions based on current state.
+
+        Actions describe WHAT to accomplish, not HOW (no fixed tools).
+        The LLM interprets these actions and chooses appropriate tools.
+        """
         actions = []
 
-        # Phase 1: Discovery actions (if few hosts discovered)
+        # Discovery actions (if few hosts discovered)
         if state.hosts_discovered < 3:
-            actions.extend(self._generate_discovery_actions(state))
-
-        # Phase 2: Enumeration actions (for discovered hosts)
-        actions.extend(self._generate_enumeration_actions(state))
-
-        # Phase 3: Exploitation actions (if vulnerabilities found)
-        actions.extend(self._generate_exploitation_actions(state))
-
-        # Phase 4: Post-exploitation actions (if access gained)
-        if state.current_access.value not in ["none", "unauthenticated"]:
-            actions.extend(self._generate_post_exploit_actions(state))
-
-        # Phase 5: Pivoting actions (if deeper networks reachable)
-        actions.extend(self._generate_pivot_actions(state))
-
-        # Phase 6: Objective actions (if objectives exist)
-        actions.extend(self._generate_objective_actions(state))
-
-        # Filter by available tools
-        actions = [a for a in actions if not a.tool_name or a.tool_name in available_tools]
-
-        # Sort by score
-        actions.sort(key=lambda a: a.score, reverse=True)
-
-        return actions
-
-    def _generate_discovery_actions(self, state: Any) -> list[CandidateAction]:
-        """Generate host/network discovery actions."""
-        return [
-            CandidateAction(
+            actions.append(CandidateAction(
                 name="host_discovery",
                 action_type=ActionType.RECON,
                 description="Discover live hosts in the target network",
                 priority=ActionPriority.HIGH,
                 confidence=0.9,
                 information_gain=0.8,
-                tool_name="nmap_host_scan",
                 reasoning="Need to identify all live hosts before enumeration",
-            ),
-            CandidateAction(
+            ))
+
+            actions.append(CandidateAction(
                 name="network_mapping",
                 action_type=ActionType.RECON,
                 description="Map network topology and routing",
                 priority=ActionPriority.MEDIUM,
                 confidence=0.8,
                 information_gain=0.7,
-                tool_name="network_map",
                 reasoning="Understanding network layout helps plan attack paths",
-            ),
-        ]
+            ))
 
-    def _generate_enumeration_actions(self, state: Any) -> list[CandidateAction]:
-        """Generate enumeration actions for discovered hosts."""
-        actions = []
-
+        # Enumeration actions (for discovered hosts)
         for host in state.hosts:
             if host.ip not in state.visited_hosts:
-                actions.append(
-                    CandidateAction(
-                        name=f"enumerate_{host.ip}",
-                        action_type=ActionType.ENUMERATE,
-                        description=f"Enumerate services on {host.ip}",
-                        priority=ActionPriority.HIGH,
-                        confidence=0.8,
-                        information_gain=0.7,
-                        tool_name="nmap_service_scan",
-                        parameters={"target": host.ip},
-                        reasoning=f"Host {host.ip} discovered but not yet enumerated",
-                    )
-                )
+                actions.append(CandidateAction(
+                    name=f"enumerate_{host.ip}",
+                    action_type=ActionType.ENUMERATE,
+                    description=f"Enumerate services on {host.ip}",
+                    priority=ActionPriority.HIGH,
+                    confidence=0.8,
+                    information_gain=0.7,
+                    parameters={"target": host.ip},
+                    reasoning=f"Host {host.ip} discovered but not yet enumerated",
+                ))
 
-        return actions
-
-    def _generate_exploitation_actions(self, state: Any) -> list[CandidateAction]:
-        """Generate exploitation actions for found vulnerabilities."""
-        actions = []
-
+        # Exploitation actions (if vulnerabilities found)
         for vuln in state.vulnerabilities:
             if vuln.exploitable and not vuln.exploited:
-                actions.append(
-                    CandidateAction(
-                        name=f"exploit_{vuln.title}",
-                        action_type=ActionType.EXPLOIT,
-                        description=f"Attempt exploitation: {vuln.title}",
-                        priority=ActionPriority.HIGH if vuln.severity == "critical" else ActionPriority.MEDIUM,
-                        confidence=0.6,
-                        information_gain=0.9,
-                        objective_relevance=0.8,
-                        tool_name="exploit_executor",
-                        parameters={"vulnerability_id": str(vuln.id)},
-                        reasoning=f"Vulnerability {vuln.title} is exploitable",
-                    )
-                )
+                actions.append(CandidateAction(
+                    name=f"exploit_{vuln.title}",
+                    action_type=ActionType.EXPLOIT,
+                    description=f"Attempt exploitation: {vuln.title}",
+                    priority=ActionPriority.HIGH if vuln.severity == "critical" else ActionPriority.MEDIUM,
+                    confidence=0.6,
+                    information_gain=0.9,
+                    objective_relevance=0.8,
+                    parameters={"vulnerability_id": str(vuln.id)},
+                    reasoning=f"Vulnerability {vuln.title} is exploitable",
+                ))
 
-        return actions
-
-    def _generate_post_exploit_actions(self, state: Any) -> list[CandidateAction]:
-        """Generate post-exploitation actions."""
-        return [
-            CandidateAction(
+        # Post-exploitation actions (if access gained)
+        if state.current_access.value not in ["none", "unauthenticated"]:
+            actions.append(CandidateAction(
                 name="system_enumeration",
                 action_type=ActionType.POST_EXPLOIT,
-                description="Enumerate system info, users, processes",
+                description="Enumerate system info, users, processes on compromised host",
                 priority=ActionPriority.HIGH,
                 confidence=0.9,
                 information_gain=0.8,
-                tool_name="post_enum",
                 reasoning="Need to understand compromised system",
-            ),
-            CandidateAction(
+            ))
+
+            actions.append(CandidateAction(
                 name="credential_harvest",
                 action_type=ActionType.POST_EXPLOIT,
                 description="Search for credentials on compromised system",
@@ -200,49 +164,37 @@ class Planner:
                 confidence=0.7,
                 information_gain=0.9,
                 objective_relevance=0.7,
-                tool_name="credential_harvest",
                 reasoning="Credentials enable lateral movement",
-            ),
-        ]
+            ))
 
-    def _generate_pivot_actions(self, state: Any) -> list[CandidateAction]:
-        """Generate pivot/lateral movement actions."""
-        actions = []
-
+        # Pivoting actions (if deeper networks reachable)
         if state.pivot_depth < state.max_pivot_depth:
-            actions.append(
-                CandidateAction(
-                    name="network_discovery_from_host",
-                    action_type=ActionType.EXPLORE,
-                    description="Discover networks reachable from compromised host",
-                    priority=ActionPriority.MEDIUM,
-                    confidence=0.7,
-                    information_gain=0.8,
-                    tool_name="internal_network_scan",
-                    reasoning="New host may reveal hidden networks",
-                )
-            )
+            actions.append(CandidateAction(
+                name="network_discovery_from_host",
+                action_type=ActionType.EXPLORE,
+                description="Discover networks reachable from compromised host",
+                priority=ActionPriority.MEDIUM,
+                confidence=0.7,
+                information_gain=0.8,
+                reasoning="Compromised host may reveal hidden networks",
+            ))
 
-        return actions
-
-    def _generate_objective_actions(self, state: Any) -> list[CandidateAction]:
-        """Generate objective-focused actions."""
-        actions = []
-
+        # Objective-focused actions
         for obj in state.objectives:
             if obj.status != "completed":
-                actions.append(
-                    CandidateAction(
-                        name=f"objective_{obj.name}",
-                        action_type=ActionType.OBJECTIVE,
-                        description=f"Work on objective: {obj.name}",
-                        priority=ActionPriority.HIGH,
-                        confidence=0.5,
-                        information_gain=0.3,
-                        objective_relevance=1.0,
-                        reasoning=f"Objective {obj.name} still incomplete",
-                    )
-                )
+                actions.append(CandidateAction(
+                    name=f"objective_{obj.name}",
+                    action_type=ActionType.OBJECTIVE,
+                    description=f"Work on objective: {obj.name}",
+                    priority=ActionPriority.HIGH,
+                    confidence=0.5,
+                    information_gain=0.3,
+                    objective_relevance=1.0,
+                    reasoning=f"Objective {obj.name} still incomplete",
+                ))
+
+        # Sort by score
+        actions.sort(key=lambda a: a.score, reverse=True)
 
         return actions
 
@@ -256,5 +208,4 @@ class Planner:
 
     def get_failed_patterns(self) -> list[str]:
         """Analyze history for failed action patterns."""
-        # Placeholder for more sophisticated analysis
         return []

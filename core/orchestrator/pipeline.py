@@ -48,7 +48,7 @@ class Phase(str, Enum):
     REPORT = "report"
 
 
-# Default phase order (some phases may be skipped dynamically).
+# Default phase order - but phases are skipped dynamically based on state.
 DEFAULT_PHASES = [
     Phase.RECON,
     Phase.FILTER_ANALYZE,
@@ -58,6 +58,43 @@ DEFAULT_PHASES = [
     Phase.PIVOT,
     Phase.REPORT,
 ]
+
+
+# Conditions for skipping a phase - determined by state, not hardcoded rules.
+def _should_skip_phase(phase: Phase, state: 'EngagementState') -> tuple[bool, str]:
+    """Dynamically determine if a phase should be skipped based on current state.
+
+    Returns (should_skip, reason). No fixed rules - just state-based logic.
+    """
+    if phase == Phase.RECON:
+        # Skip if hosts are already discovered
+        if state.hosts_discovered > 0:
+            return True, f"Hosts already discovered ({state.hosts_discovered})"
+    elif phase == Phase.FILTER_ANALYZE:
+        # Skip if no hosts to analyze filters for
+        if state.hosts_discovered == 0:
+            return True, "No hosts to analyze filters for"
+    elif phase == Phase.ENUMERATE:
+        # Skip if no services to enumerate
+        if state.services_discovered == 0:
+            return True, "No services to enumerate"
+    elif phase == Phase.EXPLOIT:
+        # Skip if no services or already have system-level access
+        if state.services_discovered == 0:
+            return True, "No services to exploit"
+        if state.current_access.value in ("system", "domain_admin"):
+            return True, f"Already at {state.current_access.value} access"
+    elif phase == Phase.POST_EXPLOIT:
+        # Skip if no access gained
+        if state.current_access.value == "none":
+            return True, "No access gained yet"
+    elif phase == Phase.PIVOT:
+        # Skip if no access or max pivot depth reached
+        if state.current_access.value == "none":
+            return True, "No access to pivot from"
+        if state.pivot_depth >= state.max_pivot_depth:
+            return True, f"Max pivot depth ({state.max_pivot_depth}) reached"
+    return False, ""
 
 
 @dataclass
@@ -277,43 +314,34 @@ class DeepEngagePipeline:
         )
 
     async def phase_enumerate(self) -> PhaseResult:
-        """Tag open services with candidate vulnerability intel."""
+        """Tag open services with informational findings.
+
+        No hardcoded service risk ratings - just records what exists
+        and lets the LLM/attacker decide what's important.
+        """
         findings: list[Finding] = []
-        risky = {
-            "ftp": "FTP may permit anonymous access / plaintext creds",
-            "telnet": "Telnet transmits credentials in cleartext",
-            "http": "Inspect web app for injection & misconfiguration",
-            "snmp": "SNMP community strings may be default/guessable",
-            "smtp": "SMTP may allow user enumeration",
-            "msrpc": "MSRPC/NetBIOS exposure aids AD enumeration",
-        }
+
         for svc in self.state.services:
             name = (svc.service_name or "").lower()
-            if name in risky:
-                findings.append(
-                    Finding(
-                        id=f"SRV-{svc.port}",
-                        title=f"Service {name}:{svc.port} exposed",
-                        severity="medium" if name not in ("ftp", "snmp") else "high",
-                        description=risky[name],
-                        evidence=[f"{svc.service_name} version {svc.version or 'n/a'}"],
-                        target=self.target,
-                    )
+            findings.append(
+                Finding(
+                    id=f"SRV-{svc.port}",
+                    title=f"Service {name}:{svc.port} discovered",
+                    severity="info",
+                    description=(
+                        f"Service '{svc.service_name}' on port {svc.port} "
+                        f"(version: {svc.version or 'unknown'}). "
+                        f"Assess attack surface based on service type."
+                    ),
+                    evidence=[f"{svc.service_name} version {svc.version or 'n/a'}"],
+                    target=self.target,
                 )
-                self.state.add_vulnerability(
-                    Vulnerability(
-                        host_id=svc.host_id,
-                        service_id=svc.id,
-                        title=f"{name}:{svc.port} exposed",
-                        description=risky[name],
-                        severity="medium",
-                    )
-                )
+            )
 
         return PhaseResult(
             phase=Phase.ENUMERATE,
             ok=True,
-            summary=f"Enumerated {len(self.state.services)} services, flagged {len(findings)}",
+            summary=f"Enumerated {len(self.state.services)} services",
             findings=findings,
         )
 

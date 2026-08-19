@@ -68,7 +68,7 @@ class TestDeepEngagePipeline:
         assert payload["summary"]["hosts"] == 1
         assert payload["summary"]["services"] == 2
         assert payload["summary"]["access"] == "user"
-        assert payload["summary"]["vulnerabilities"] >= 2  # 1 risky service + 1 exploited
+        assert payload["summary"]["vulnerabilities"] >= 1  # 1 exploited
 
         # All 7 phases executed in order.
         phases = [p["phase"] for p in payload["phases"]]

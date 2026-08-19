@@ -253,7 +253,7 @@ class PenAIRepl:
         self._show_attack_plan()
 
     def _show_attack_plan(self):
-        """Show suggested attack plan."""
+        """Show discovered services for user/LLM to decide attacks."""
         all_svcs = []
         for host, svcs in self.services.items():
             for svc in svcs:
@@ -267,17 +267,22 @@ class PenAIRepl:
         if not plan:
             return
 
-        print(f"\n  \033[1m🎯 ATTACK PLAN:\033[0m")
-        for i, attack in enumerate(plan[:10], 1):
-            host = self.hosts[0] if self.hosts else "?"
-            tool = attack["tool"].replace("{target}", host)
-            print(f"    {i}. \033[96m{tool[:70]}\033[0m")
-            print(f"       \033[90m→ {attack['reason']}\033[0m")
+        print(f"\n  \033[1m🎯 DISCOVERED SERVICES:\033[0m")
+        for i, svc_info in enumerate(plan[:10], 1):
+            host = svc_info.get('host', '?')
+            port = svc_info.get('target_port', '?')
+            name = svc_info.get('target_service', '?')
+            ver = svc_info.get('target_version', '')
+            desc = svc_info.get('description', '')
+            print(f"    {i}. \033[96m{host}:{port} -> {name}\033[0m")
+            if ver:
+                print(f"       \033[90mversion: {ver}\033[0m")
 
-        print(f"\n  Run 'exploit' to execute all, or 'attack <host>:<port>' for specific.")
+        print(f"\n  Run 'exploit' to attempt exploitation, or 'attack <host>:<port>' for specific.")
+        print(f"  The LLM will determine the best attack approach for each service.")
 
     async def _cmd_exploit(self):
-        """Auto-exploit all found services."""
+        """Auto-exploit all found services using the exploitation engine."""
         if not self.services:
             print("  No services found. Run 'scan' first.")
             return
@@ -290,50 +295,30 @@ class PenAIRepl:
                 service = svc.get("service", "").lower()
                 print(f"  \033[96m→ Attacking {host}:{port} ({service})\033[0m")
 
-                # Get attacks for this service
-                attacks = []
-                for svc_pattern, attack_list in AttackSurface.ATTACK_MAP.items():
-                    if svc_pattern in service:
-                        attacks = attack_list
-                        break
-
-                for attack in attacks:
-                    tool = attack["tool"].replace("{target}", host).replace("{port}", str(port))
-                    if tool in self.failed:
-                        continue
-
-                    print(f"    $ {tool[:80]}")
-                    result = await self.executor.run(tool, timeout=120)
-                    self.commands_run.append(tool)
-
-                    if result.exit_code == 0 and result.stdout:
-                        # Check for interesting output
-                        output = result.stdout
-                        if any(kw in output.lower() for kw in ["password", "credential", "success", "uid=", "root", "found"]):
-                            print(f"    \033[92m✓ INTERESTING OUTPUT:\033[0m")
-                            for line in output.strip().split("\n")[:10]:
-                                print(f"      {line[:100]}")
-
-                            # Try to extract credentials
-                            import re
-                            pw_match = re.findall(r"password[=:]\s*(\S+)", output, re.IGNORECASE)
-                            for pw in pw_match:
-                                self.credentials.append({"type": "password", "value": pw, "host": host})
-                                print(f"    \033[91m🔑 PASSWORD FOUND: {pw}\033[0m")
-
-                            uid_match = re.search(r"uid=(\d+)\((\w+)\)", output)
-                            if uid_match:
-                                level = "root" if uid_match.group(1) == "0" else "user"
-                                self.access_map[host] = level
-                                print(f"    \033[91m🎯 ACCESS: {level} on {host}\033[0m")
-                    else:
-                        self.failed.add(tool)
+                try:
+                    from exploitation.engine import ExploitationEngine
+                    engine = ExploitationEngine()
+                    attempts = await engine.auto_exploit_service(host, port, service)
+                    for attempt in attempts:
+                        status = "\033[92m✓\033[0m" if attempt.status.value == "success" else "\033[91m✗\033[0m"
+                        print(f"    {status} {attempt.technique}: {attempt.status.value}")
+                        if attempt.status.value == "success":
+                            if attempt.access_gained:
+                                self.access_map[host] = attempt.access_gained.value
+                                print(f"      \033[91m🎯 ACCESS: {attempt.access_gained.value} on {host}\033[0m")
+                            if attempt.evidence:
+                                for line in attempt.evidence.split("\n")[:5]:
+                                    print(f"      {line[:100]}")
+                        elif attempt.error:
+                            print(f"      {attempt.error[:100]}")
+                except Exception as e:
+                    print(f"    \033[91m✗ Engine error: {e}\033[0m")
 
         print(f"\n  \033[1mEXPLOITATION COMPLETE\033[0m")
         self._cmd_suggest()
 
     async def _cmd_enum(self):
-        """Enumerate all services."""
+        """Enumerate all services - uses the exploitation engine's module system."""
         if not self.services:
             print("  No services found. Run 'scan' first.")
             return
@@ -344,27 +329,25 @@ class PenAIRepl:
             for svc in svcs:
                 service = svc.get("service", "").lower()
                 port = svc.get("port", 0)
+                print(f"  → Enumerating {service}:{port} on {host}...")
 
-                if "microsoft-ds" in service or "netbios" in service:
-                    print(f"  → SMB enum on {host}...")
-                    result = await self.executor.run(f"enum4linux -a {host}", timeout=120)
-                    if result.exit_code == 0:
-                        print(f"    \033[92m✓ SMB enum complete\033[0m")
-
-                elif service == "http" or service == "https":
-                    scheme = "https" if service == "https" else "http"
-                    print(f"  → Web enum on {host}:{port}...")
-                    result = await self.executor.run(f"gobuster dir -u {scheme}://{host}:{port} -w /usr/share/wordlists/dirb/common.txt -q -t 10 --no-error -s 200,301,302 2>/dev/null | head -30", timeout=60)
-                    if result.exit_code == 0 and result.stdout:
-                        print(f"    \033[92m✓ Directories found:\033[0m")
-                        for line in result.stdout.strip().split("\n")[:15]:
-                            print(f"      {line}")
-
-                elif service == "ldap":
-                    print(f"  → LDAP enum on {host}...")
-                    result = await self.executor.run(f"ldapsearch -h {host} -x -b '' -s base namingContexts", timeout=30)
-                    if result.exit_code == 0:
-                        print(f"    \033[92m✓ LDAP response received\033[0m")
+                # Use the exploit engine's modules for enumeration
+                try:
+                    from exploitation.engine import ExploitationEngine
+                    engine = ExploitationEngine()
+                    # Get modules that match this service
+                    modules = engine.orchestrator.get_modules_by_service(service)
+                    if modules:
+                        for module in modules:
+                            result = await module.check_vulnerability(host, port)
+                            if result.get("vulnerable"):
+                                print(f"    \033[92m✓ {module.info.name}: {result.get('details', 'vulnerable')}\033[0m")
+                            else:
+                                print(f"    \033[90m  {module.info.name}: {result.get('reason', 'not vulnerable')}\033[0m")
+                    else:
+                        print(f"    \033[90m  No modules available for {service}\033[0m")
+                except Exception as e:
+                    print(f"    \033[91m  Error: {e}\033[0m")
 
     async def _cmd_pivot(self):
         """Find and pivot to new networks."""
@@ -555,7 +538,7 @@ class PenAIRepl:
                 print(f"    -> \033[96m{cmd[:80]}\033[0m")
 
     async def _cmd_attack(self, target: str):
-        """Attack specific host:port."""
+        """Attack specific host:port using the exploitation engine."""
         if ":" in target:
             host, port = target.split(":", 1)
             port = int(port)
@@ -573,16 +556,24 @@ class PenAIRepl:
 
         print(f"\n  \033[91m⚔️  ATTACKING {host}:{port} ({service})\033[0m\n")
 
-        for svc_pattern, attacks in AttackSurface.ATTACK_MAP.items():
-            if svc_pattern in service.lower():
-                for attack in attacks:
-                    tool = attack["tool"].replace("{target}", host).replace("{port}", str(port))
-                    print(f"  $ {tool[:80]}")
-                    result = await self.executor.run(tool, timeout=120)
-                    self.commands_run.append(tool)
-                    if result.exit_code == 0 and result.stdout:
-                        self._parse_output(tool, result.stdout, result.stderr)
-                break
+        try:
+            from exploitation.engine import ExploitationEngine
+            engine = ExploitationEngine()
+            attempts = await engine.auto_exploit_service(host, port, service)
+            for attempt in attempts:
+                status = "\033[92m✓\033[0m" if attempt.status.value == "success" else "\033[91m✗\033[0m"
+                print(f"  {status} {attempt.technique}: {attempt.status.value}")
+                if attempt.status.value == "success":
+                    if attempt.access_gained:
+                        self.access_map[host] = attempt.access_gained.value
+                        print(f"    \033[91m🎯 ACCESS: {attempt.access_gained.value} on {host}\033[0m")
+                    if attempt.evidence:
+                        for line in attempt.evidence.split("\n")[:5]:
+                            print(f"    {line[:100]}")
+                elif attempt.error:
+                    print(f"    {attempt.error[:100]}")
+        except Exception as e:
+            print(f"  \033[91m✗ Engine error: {e}\033[0m")
 
     async def _cmd_run(self, command: str):
         """Run any command."""

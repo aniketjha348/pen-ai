@@ -130,6 +130,23 @@ Landscape fixed on the `enterprise-hardening` branch:
 | BloodHound neo4j attack-path queries (`enterprise/bloodhound_queries.py`, real Cypher vs placeholder note) | DONE |
 | CVSS v3.1 scoring engine (`reporting/cvss.py`, pure stdlib, auto-scored findings) | DONE |
 
+### Hardcoded Rules Removed (2026-08-19)
+
+All fixed/hardcoded decision logic removed. The LLM now decides everything:
+
+| Removed | File | What Replaced It |
+|---------|------|------------------|
+| `ATTACK_MAP` (service→tool mapping) | `ai/brain.py` | LLM observes services, picks tools |
+| `POST_EXPLOIT` (fixed post-exploit actions) | `ai/brain.py` | LLM decides based on access level |
+| `_get_priority()` (hardcoded scores) | `ai/brain.py` | LLM assigns priority dynamically |
+| `cmd_prefixes` whitelist (80+ tools) | `ai/autonomous_agent.py` | Any shell command accepted |
+| `_parse_and_suggest_next()` | `ai/autonomous_agent.py` | LLM analyzes output |
+| Fixed action generation with tool names | `ai/planner.py` | Actions describe goals, LLM picks tools |
+| Hardcoded "risky service" dict | `core/orchestrator/pipeline.py` | Records observations only |
+| `EXPLOITABLE_SUIDS` (13 binaries) | `exploitation/modules/privesc.py` | GTFOBins research by LLM |
+| `VULNERABLE_KERNELS` (5 patterns) | `exploitation/modules/privesc.py` | Kernel version research by LLM |
+| Hardcoded SMB/web/LDAP enum | `app/terminal/repl.py` | Uses exploitation engine modules |
+
 ### Still Placeholder (unchanged)
 - AD Kerberoasting / DCSync / AS-REP Roast / LDAP Enum (impacket integration)
 - Binary analysis (pwntools/checksec)

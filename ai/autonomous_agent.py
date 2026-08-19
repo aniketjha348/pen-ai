@@ -76,6 +76,7 @@ TOOLS YOU CAN USE:
 - python3, curl, wget (scripting)
 - sshpass, ssh (remote access)
 - docker, docker-compose (containers)
+- Any other tool you need
 
 IF A TOOL IS NOT INSTALLED: Install it yourself. Use apt-get, pip, go install, or download the binary.
 
@@ -87,6 +88,8 @@ RULES:
 - ALWAYS update your state after each action.
 - If something fails, try a different approach.
 - Think like a real attacker. Be creative. Be thorough.
+- You decide what commands to run based on what you discover.
+- There are no hardcoded rules - use your intelligence.
 
 CURRENT STATE:
 {json.dumps(self.state, indent=2, default=str)}
@@ -154,7 +157,7 @@ Based on this output, what should I do next? Give me the exact command."""
             )
             return result, response
         else:
-            return result, self._parse_and_suggest_next(command, output)
+            return result, self._analyze_output(command, output)
 
     async def install_and_run(self, tool_name: str, command: str) -> CommandResult:
         """Install a tool if needed, then run the command."""
@@ -223,7 +226,12 @@ Based on this output, what should I do next? Give me the exact command."""
         print(f"{'='*60}")
 
     def _extract_commands(self, llm_response: str) -> list[str]:
-        """Extract executable commands from LLM response."""
+        """Extract executable commands from LLM response.
+
+        No hardcoded command prefix list. The LLM decides what commands
+        to run, and we extract them from its response.
+        """
+        import re
         commands = []
         lines = llm_response.split("\n")
 
@@ -234,7 +242,7 @@ Based on this output, what should I do next? Give me the exact command."""
             stripped = line.strip()
 
             # Look for command blocks
-            if stripped.startswith("```") or stripped.startswith("```bash") or stripped.startswith("```sh"):
+            if stripped.startswith("```"):
                 in_command_block = not in_command_block
                 if in_command_block:
                     current_cmd = []
@@ -251,53 +259,31 @@ Based on this output, what should I do next? Give me the exact command."""
                         commands.append(full_cmd)
                     current_cmd = []
 
-            # Also handle inline commands with common prefixes
+            # Also extract inline commands - look for shell command patterns
             elif stripped and not stripped.startswith("#") and not stripped.startswith("-"):
-                # Handle lines that contain a command after some text
-                # Look for commands that start with known tool names
-                cmd_prefixes = [
-                    "nmap ", "enum4linux", "ldapsearch", "smbclient",
-                    "curl ", "wget ", "sshpass", "ssh ", "python3 ",
-                    "pip install", "apt-get ", "apt install",
-                    "gobuster ", "ffuf ", "nikto ", "sqlmap ",
-                    "hydra ", "john ", "hashcat ",
-                    "msfconsole", "msfvenom",
-                    "chisel ", "ligolo ",
-                    "binwalk ", "checksec ", "gdb ",
-                    "find ", "cat ", "grep ", "ls ", "cd ", "mkdir ",
-                    "echo ", "id ", "whoami", "uname", "ifconfig",
-                    "ip ", "ss ", "netstat ", "ps ", "top ",
-                    "netcat", "nc ", "socat ",
-                    "docker ", "systemctl ",
-                    "go install", "git clone",
-                    "chmod ", "cp ", "mv ", "rm ",
-                    "strings ", "objdump ", "readelf ", "nm ",
-                    "gcc ", "make ",
-                ]
-                if any(stripped.startswith(p) for p in cmd_prefixes):
-                    if self._is_safe_command(stripped):
-                        commands.append(stripped)
-                # Also check for commands after "Run this:" or "Execute:" or ": "
-                elif any(marker in stripped.lower() for marker in [": ", "run ", "execute ", "use "]):
-                    # Try to extract the command part
-                    for marker in [": ", "Run ", "Execute ", "use "]:
-                        if marker.lower() in stripped.lower():
-                            idx = stripped.lower().index(marker.lower()) + len(marker)
-                            potential_cmd = stripped[idx:].strip().strip('"').strip("'")
-                            if any(potential_cmd.startswith(p) for p in cmd_prefixes):
-                                if self._is_safe_command(potential_cmd):
-                                    commands.append(potential_cmd)
-                            break
+                # Match lines that look like shell commands
+                # A command typically starts with a lowercase letter and
+                # contains arguments (spaces followed by more text)
+                if re.match(r'^[a-z]', stripped) and ' ' in stripped:
+                    # Looks like a command line
+                    potential_cmd = stripped.split("#")[0].strip()  # Remove inline comments
+                    if potential_cmd and self._is_safe_command(potential_cmd):
+                        commands.append(potential_cmd)
 
         return commands
 
     def _is_safe_command(self, cmd: str) -> bool:
-        """Check command is within scope (only safety check)."""
-        # Only check that we're not targeting outside scope
+        """Check command is within scope (only safety check).
+
+        Minimal safety check - only block truly destructive out-of-scope actions.
+        The LLM decides what commands are appropriate.
+        """
         dangerous_out_of_scope = [
-            "rm -rf /", "rm -rf /*",
+            "rm -rf /",
+            "rm -rf /*",
             ":(){:|:&};:",  # fork bomb
-            "mkfs", "dd if=",
+            "mkfs",
+            "dd if=",
             "> /dev/sda",
         ]
         for pattern in dangerous_out_of_scope:
@@ -306,19 +292,22 @@ Based on this output, what should I do next? Give me the exact command."""
         return True
 
     def _update_state_from_output(self, command: str, stdout: str, stderr: str):
-        """Parse command output and update engagement state."""
+        """Parse command output and update engagement state.
+
+        Uses regex patterns that work for any tool output, not
+        hardcoded to specific tool formats.
+        """
+        import re
         output = stdout + stderr
 
         # Parse nmap output for hosts and services
         if "nmap" in command and "scan report for" in output.lower():
-            import re
             hosts = re.findall(r"(\d+\.\d+\.\d+\.\d+)", output)
             for host in hosts:
                 if host not in self.state["hosts_discovered"]:
                     self.state["hosts_discovered"].append(host)
 
-        # Parse services
-        import re
+        # Parse services (works for nmap, masscan, etc.)
         services = re.findall(r"(\d+)/\w+\s+open\s+(\S+)", output)
         for port, service in services:
             svc_entry = {"port": int(port), "service": service}
@@ -349,7 +338,11 @@ Based on this output, what should I do next? Give me the exact command."""
             self.state["access_level"] = "system"
 
     def _advance_phase(self):
-        """Move to next engagement phase."""
+        """Move to next engagement phase.
+
+        Phases are not fixed - they're just labels for the current
+        activity. The LLM decides what phase to enter next.
+        """
         phases = [
             "reconnaissance", "enumeration", "vulnerability_identification",
             "exploitation", "post_exploitation", "pivoting",
@@ -366,7 +359,10 @@ Based on this output, what should I do next? Give me the exact command."""
         return self.state["phase"] == "complete"
 
     def _generate_initial_commands(self) -> str:
-        """Generate initial commands when no LLM is available."""
+        """Generate initial commands when no LLM is available.
+
+        Just a simple starting point - the LLM takes over from here.
+        """
         return f"""Starting reconnaissance on {self.target}.
 
 First, I need to discover live hosts and services:
@@ -377,17 +373,43 @@ nmap -sn {self.target}
 
 Then enumerate services on discovered hosts."""
 
-    def _parse_and_suggest_next(self, command: str, output: str) -> str:
-        """Suggest next command based on output (no-LLM fallback)."""
-        if "nmap" in command and "scan report for" in output.lower():
-            return "Hosts found. Now enumerate services with: nmap -sV -sC -p- <host>"
-        elif "smb" in output.lower() or "445" in command:
-            return "SMB found. Enumerate shares with: smbclient -L <target> -N"
-        elif "ssh" in output.lower() or "22" in command:
-            return "SSH found. Try brute force with: hydra -l root -P /usr/share/wordlists/rockyou.txt ssh://<target>"
-        elif "http" in output.lower() or "80" in command:
-            return "HTTP found. Enumerate with: gobuster dir -u http://<target> -w /usr/share/wordlists/dirb/common.txt"
-        return "Analyze output and continue enumeration."
+    def _analyze_output(self, command: str, output: str) -> str:
+        """Provide basic observations when no LLM is available.
+
+        Just describes what was found, doesn't prescribe actions.
+        """
+        import re
+
+        observations = []
+
+        # Count hosts found
+        hosts = re.findall(r"(\d+\.\d+\.\d+\.\d+)", output)
+        if hosts:
+            observations.append(f"Found {len(set(hosts))} IP address(es) in output")
+
+        # Count services
+        services = re.findall(r"(\d+)/\w+\s+open\s+(\S+)", output)
+        if services:
+            observations.append(f"Found {len(services)} open service(s)")
+
+            # Group by service type
+            svc_types = {}
+            for port, svc in services:
+                if svc not in svc_types:
+                    svc_types[svc] = []
+                svc_types[svc].append(port)
+
+            for svc, ports in svc_types.items():
+                observations.append(f"  {svc}: ports {', '.join(ports)}")
+
+        # Detect credentials
+        if re.search(r"password[=:]\s*\S+", output, re.IGNORECASE):
+            observations.append("Credential pattern detected in output")
+
+        if not observations:
+            observations.append("No notable patterns found in output")
+
+        return "Observations from command output:\n" + "\n".join(observations)
 
     def get_report(self) -> dict:
         """Generate engagement report."""
