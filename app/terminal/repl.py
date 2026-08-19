@@ -573,30 +573,112 @@ class PenAIRepl:
         print(f"{'='*60}")
 
         # Generate HTML report
-        report = HTMLReportGenerator(title="PEN-AI Engagement Report")
+        report = HTMLReportGenerator(title="PEN-AI Penetration Test Report")
         report.load_from_state(self._get_state())
         report.start_time = self.start_time
         report.end_time = datetime.now()
 
+        # Phase 1: Target Identified
+        if self.target:
+            report.add_evidence(
+                "target_identified",
+                "Target Scope",
+                f"Target: {self.target}",
+                f"Scope: {self.target}\nHosts discovered: {len(self.hosts)}\nServices found: {sum(len(v) for v in self.services.values())}",
+                severity="info",
+            )
+
+        # Phase 2: Enumeration
+        for host, svcs in self.services.items():
+            evidence = f"Host: {host}\n"
+            for svc in svcs:
+                evidence += f"  {svc.get('port', '?')}/{svc.get('service', '?')} {svc.get('version', '')}\n"
+            report.add_evidence(
+                "enumeration",
+                f"Services on {host}",
+                f"nmap -sV -sC {host}",
+                evidence,
+                severity="info",
+            )
+
+        # Phase 3: Vulnerability Identified
+        for host, svcs in self.services.items():
+            for svc in svcs:
+                report.add_evidence(
+                    "vulnerability_identified",
+                    f"Service {svc.get('service', '?')}:{svc.get('port', '?')} on {host}",
+                    f"Service enumeration: {svc.get('service', '?')} {svc.get('version', '')}",
+                    f"Service {svc.get('service', '?')} on port {svc.get('port', '?')} with version {svc.get('version', 'unknown')}",
+                    severity="medium",
+                )
+
+        # Phase 4: Exploitation
         for host, level in self.access_map.items():
+            report.add_evidence(
+                "exploitation",
+                f"Exploitation of {host}",
+                f"Exploit successful on {host}",
+                f"Access gained: {level}",
+                severity="critical",
+            )
+
+        # Phase 5: Access Obtained
+        for host, level in self.access_map.items():
+            report.add_evidence(
+                "access_obtained",
+                f"Access on {host}",
+                f"whoami && id",
+                f"Access level: {level}\nHost: {host}",
+                severity="critical",
+                notes=f"Successfully compromised {host} with {level} access",
+            )
             report.add_finding(
                 title=f"Access gained on {host}",
                 severity="critical",
                 description=f"Successfully gained {level} access on {host}",
+                remediation="Implement network segmentation and access controls.",
             )
 
+        # Phase 6: Privilege Escalation (if applicable)
+        for host, level in self.access_map.items():
+            if level in ["root", "system", "admin"]:
+                report.add_evidence(
+                    "privilege_escalation",
+                    f"Privilege escalation on {host}",
+                    "sudo -l && id",
+                    f"Privilege level: {level}\nHost: {host}",
+                    severity="critical",
+                )
+
+        # Phase 7: Sensitive Data
         for cred in self.credentials:
+            report.add_evidence(
+                "sensitive_data",
+                f"Credential: {cred.get('type', '?')}",
+                "Credential harvesting",
+                f"Type: {cred.get('type', '?')}\nValue: {str(cred.get('value', ''))[:50]}",
+                severity="high",
+            )
             report.add_finding(
                 title=f"Credential discovered: {cred.get('type', '?')}",
                 severity="high",
                 description=f"Found credential: {str(cred.get('value', ''))[:40]}",
+                remediation="Change default credentials and implement credential management.",
             )
 
         for net in self.pivoted:
+            report.add_evidence(
+                "sensitive_data",
+                f"Network discovered: {net}",
+                "ip route && arp -a",
+                f"New network segment: {net}",
+                severity="medium",
+            )
             report.add_finding(
                 title=f"New network discovered: {net}",
                 severity="medium",
                 description=f"Discovered network segment {net} through pivoting",
+                remediation="Implement network segmentation and monitoring.",
             )
 
         import tempfile
