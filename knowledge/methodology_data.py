@@ -1,4 +1,4 @@
-"""CPENT Knowledge Base - Comprehensive CPENT methodology and techniques."""
+"""PenTest Knowledge Base - Comprehensive PenTest methodology and techniques."""
 
 from dataclasses import dataclass, field
 from typing import Optional
@@ -6,7 +6,7 @@ from enum import Enum
 
 
 class KnowledgeCategory(str, Enum):
-    """Categories of CPENT knowledge."""
+    """Categories of PenTest knowledge."""
 
     METHODOLOGY = "methodology"
     RECONNAISSANCE = "reconnaissance"
@@ -38,14 +38,14 @@ class KnowledgeEntry:
 
 
 # ============================================================
-# CPENT METHODOLOGY
+# PenTest METHODOLOGY
 # ============================================================
 
 METHODOLOGY_ENTRIES = [
     KnowledgeEntry(
         id="method_001",
-        title="CPENT Engagement Methodology",
-        content="""The CPENT penetration testing methodology follows these phases:
+        title="PenTest Engagement Methodology",
+        content="""The PenTest penetration testing methodology follows these phases:
 1. Pre-engagement: Scope, Rules of Engagement, Authorization
 2. Reconnaissance: Passive and active information gathering
 3. Scanning & Enumeration: Network, service, and application discovery
@@ -61,7 +61,7 @@ METHODOLOGY_ENTRIES = [
     KnowledgeEntry(
         id="method_002",
         title="Adaptive Attack Strategy",
-        content="""CPENT requires adaptive thinking, not scripted attacks:
+        content="""PenTest requires adaptive thinking, not scripted attacks:
 - Observe the environment before acting
 - Build a mental model of the network
 - Generate hypotheses about attack paths
@@ -83,7 +83,7 @@ RECON_ENTRIES = [
     KnowledgeEntry(
         id="recon_001",
         title="Nmap Scanning Techniques",
-        content="""Nmap scanning techniques for CPENT:
+        content="""Nmap scanning techniques for PenTest:
 - Host Discovery: nmap -sn 10.10.10.0/24
 - Quick Scan: nmap -T4 -F target
 - Full Port Scan: nmap -T4 -p- target
@@ -133,7 +133,7 @@ RECON_ENTRIES = [
         id="recon_004",
         title="Firewall / Filter Identification (Go Deeper)",
         content="""Identifying the filtering mechanism protecting a subnet:
-- ICMP Type 3 Code 13 (Communication Administratively Prohibited) = Cisco router / stateless ACL - THE CPENT firewall signature.
+- ICMP Type 3 Code 13 (Communication Administratively Prohibited) = Cisco router / stateless ACL - THE PenTest firewall signature.
 - ICMP Type 3 Code 10 (Host Administratively Prohibited) = iptables / stateful host deny.
 - ICMP Type 3 Code 3 (Port Unreachable) confirms the host is ALIVE and routed behind the filter.
 - 'closed' responses prove the host is live; 'filtered' responses mean silent-drop.
@@ -169,7 +169,7 @@ EXPLOIT_ENTRIES = [
     KnowledgeEntry(
         id="exploit_001",
         title="Common Exploitation Techniques",
-        content="""Common exploitation techniques for CPENT:
+        content="""Common exploitation techniques for PenTest:
 - Password Attacks: Hydra, Medusa, CrackMapExec
 - SMB Attacks: smbclient, crackmapexec, smbmap
 - SSH Attacks: hydra ssh, sshkey_brute
@@ -552,7 +552,7 @@ TOOLS_ENTRIES = [
     KnowledgeEntry(
         id="tools_001",
         title="Essential Pentesting Tools",
-        content="""Essential tools for CPENT:
+        content="""Essential tools for PenTest:
 Recon: nmap, masscan, arp-scan, netdiscover
 Enumeration: enum4linux, smbclient, nikto, gobuster, feroxbuster
 Exploitation: metasploit, searchsploit, sqlmap, hydra

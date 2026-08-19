@@ -17,7 +17,7 @@ from core.events.models import Event, EventType, EventChain
 SYSTEM_PROMPT = """You are PEN-AI, an AI-powered adaptive penetration testing operator.
 
 ## Your Role
-You operate within an authorized CPENT examination/practice environment.
+You operate within an authorized penetration testing environment.
 Your goal is to discover vulnerabilities, gain access, escalate privileges, and complete objectives.
 
 ## Core Principles
@@ -126,7 +126,7 @@ class MasterAgent:
             return None
 
         self._cycle_count += 1
-        print(f"\n[bold cyan]═══ Reasoning Cycle {self._cycle_count} ═══[/bold cyan]")
+        print(f"\n[bold cyan]â•â•â• Reasoning Cycle {self._cycle_count} â•â•â•[/bold cyan]")
 
         # Step 1: OBSERVE - Build current state summary
         print("[yellow]1. Observing state...[/yellow]")
@@ -175,7 +175,7 @@ class MasterAgent:
         # Step 8: RECORD
         self.planner.record_action(selected)
 
-        print("[bold cyan]═══ Cycle Complete ═══[/bold cyan]")
+        print("[bold cyan]â•â•â• Cycle Complete â•â•â•[/bold cyan]")
         return selected
 
     async def _llm_decide(

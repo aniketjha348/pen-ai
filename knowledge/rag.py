@@ -1,4 +1,4 @@
-"""RAG Client - ChromaDB-based retrieval augmented generation for CPENT knowledge."""
+"""RAG Client - ChromaDB-based retrieval augmented generation for PenTest knowledge."""
 
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -11,7 +11,7 @@ try:
 except ImportError:
     HAS_CHROMADB = False
 
-from knowledge.cpent_data import (
+from knowledge.methodology_data import (
     KnowledgeEntry,
     KnowledgeCategory,
     get_all_entries,
@@ -24,13 +24,13 @@ class RAGConfig:
     """RAG configuration."""
 
     persist_directory: str = "knowledge/chroma_db"
-    collection_name: str = "cpent_knowledge"
+    collection_name: str = "pentest_knowledge"
     embedding_model: str = "all-MiniLM-L6-v2"  # Sentence transformer model
     max_results: int = 5
 
 
 class RAGClient:
-    """ChromaDB-based RAG client for CPENT knowledge."""
+    """ChromaDB-based RAG client for PenTest knowledge."""
 
     def __init__(self, config: Optional[RAGConfig] = None):
         self.config = config or RAGConfig()
@@ -200,7 +200,7 @@ class RAGClient:
         if not results:
             return "No relevant knowledge found."
 
-        context_parts = ["Relevant CPENT Knowledge:"]
+        context_parts = ["Relevant PenTest Knowledge:"]
         current_length = 0
 
         for result in results:

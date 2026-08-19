@@ -1,4 +1,4 @@
-"""Firewall / Filter Analysis - CPENT "Go Deeper" firewall identification & bypass modules.
+"""Firewall / Filter Analysis - PenTest "Go Deeper" firewall identification & bypass modules.
 
 Implements the advanced techniques needed when a target subnet is protected by a
 filtering device (router ACL, firewall software, iptables, or a firewall appliance):
@@ -40,7 +40,7 @@ ICMP_TYPE3_CODES = {
     1: ("Host Unreachable", "routing-level block (router has no route / drops)"),
     3: ("Port Unreachable", "host is ALIVE and routed; port is closed/silent -> confirms reachability"),
     10: ("Host Administratively Prohibited", "firewall/iptables denying the host deliberately"),
-    13: ("Communication Administratively Prohibited", "Cisco router / stateless ACL filtering - the CPENT firewall signature"),
+    13: ("Communication Administratively Prohibited", "Cisco router / stateless ACL filtering - the PenTest firewall signature"),
 }
 
 # The strongest indicator of a stateless filter (Cisco ACL).
@@ -102,7 +102,7 @@ def detect_icmp_prohibited(lines: str) -> list[tuple[int, int]]:
 def classify_filter(probes: list[PortProbe], icmp_codes: Optional[list[tuple[int, int]]] = None) -> FilterReport:
     """Turn observed port/ICMP responses into a conclusion about the filter.
 
-    This is the "interpret the data" step from the CPENT methodology.
+    This is the "interpret the data" step from the PenTest methodology.
 
     Decision tree:
     - ICMP type 3 code 13 (admin prohibited) -> Cisco router / stateless ACL.
@@ -384,7 +384,7 @@ async def filter_rule_map(target: str, ports: str = "1-1000", raw: Optional[str]
 
 @register_tool(
     name="filter_sourceport_bypass",
-    description="Bypass a weak stateless-filter rule by spoofing the source port (e.g. -g 20 to mimic active-FTP data channel). Diffs baseline vs bypass to expose newly-visible ports. CPENT weak-rule technique.",
+    description="Bypass a weak stateless-filter rule by spoofing the source port (e.g. -g 20 to mimic active-FTP data channel). Diffs baseline vs bypass to expose newly-visible ports. PenTest weak-rule technique.",
     category=ToolCategory.RECON,
     parameters=[
         ToolParameter(name="target", type="str", description="Target IP"),

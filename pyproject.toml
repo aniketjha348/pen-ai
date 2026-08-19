@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pen-ai"
 version = "0.1.0"
-description = "AI-powered adaptive penetration-testing operator for CPENT environments"
+description = "AI-powered adaptive penetration-testing operator for enterprise internal networks"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}

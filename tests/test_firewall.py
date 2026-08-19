@@ -1,4 +1,4 @@
-"""Tests for the CPENT firewall/filter analysis modules (recon.firewall_analysis)."""
+"""Tests for the PenTest firewall/filter analysis modules (recon.firewall_analysis)."""
 
 import asyncio
 

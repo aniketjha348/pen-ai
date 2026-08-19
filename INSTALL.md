@@ -152,37 +152,37 @@ pen-ai --model your-model
 
 ```
 pen-ai/
-├── ai/                    # AI brain and decision engine
-│   ├── autonomous_executor.py  # Run any command
-│   ├── autonomous_agent.py     # LLM-driven agent
-│   ├── brain.py                # Attack surface analysis
-│   ├── context_compressor.py   # Token management
-│   ├── credential_cracker.py   # Auto hash cracking
-│   ├── shell_generator.py      # Reverse shell generator
-│   ├── streaming.py            # Real-time output
-│   ├── llm_client.py           # LLM API client
-│   └── relentless_agent.py     # Never-stop agent
-├── app/
-│   ├── cli/main.py             # CLI entry point
-│   ├── terminal/repl.py        # Interactive REPL
-│   └── config/                 # Configuration
-├── core/
-│   ├── session.py              # Session persistence
-│   ├── state/                  # Engagement state
-│   └── orchestrator/           # Main loop
-├── ranges/
-│   ├── ad/agent.py             # Active Directory
-│   ├── web/agent.py            # Web applications
-│   ├── binary/agent.py         # Binary exploitation
-│   ├── iot/agent.py            # IoT devices
-│   └── ctf/agent.py            # CTF/Linux
-├── exploitation/               # Exploit modules
-├── recon/                      # Reconnaissance
-├── pivoting/                   # Network pivoting
-├── post_exploitation/          # Post-exploit
-├── knowledge/                  # CPENT knowledge base
-├── enterprise/                 # Enterprise tools
-└── tests/                      # 168 tests
+â”œâ”€â”€ ai/                    # AI brain and decision engine
+â”‚   â”œâ”€â”€ autonomous_executor.py  # Run any command
+â”‚   â”œâ”€â”€ autonomous_agent.py     # LLM-driven agent
+â”‚   â”œâ”€â”€ brain.py                # Attack surface analysis
+â”‚   â”œâ”€â”€ context_compressor.py   # Token management
+â”‚   â”œâ”€â”€ credential_cracker.py   # Auto hash cracking
+â”‚   â”œâ”€â”€ shell_generator.py      # Reverse shell generator
+â”‚   â”œâ”€â”€ streaming.py            # Real-time output
+â”‚   â”œâ”€â”€ llm_client.py           # LLM API client
+â”‚   â””â”€â”€ relentless_agent.py     # Never-stop agent
+â”œâ”€â”€ app/
+â”‚   â”œâ”€â”€ cli/main.py             # CLI entry point
+â”‚   â”œâ”€â”€ terminal/repl.py        # Interactive REPL
+â”‚   â””â”€â”€ config/                 # Configuration
+â”œâ”€â”€ core/
+â”‚   â”œâ”€â”€ session.py              # Session persistence
+â”‚   â”œâ”€â”€ state/                  # Engagement state
+â”‚   â””â”€â”€ orchestrator/           # Main loop
+â”œâ”€â”€ ranges/
+â”‚   â”œâ”€â”€ ad/agent.py             # Active Directory
+â”‚   â”œâ”€â”€ web/agent.py            # Web applications
+â”‚   â”œâ”€â”€ binary/agent.py         # Binary exploitation
+â”‚   â”œâ”€â”€ iot/agent.py            # IoT devices
+â”‚   â””â”€â”€ ctf/agent.py            # CTF/Linux
+â”œâ”€â”€ exploitation/               # Exploit modules
+â”œâ”€â”€ recon/                      # Reconnaissance
+â”œâ”€â”€ pivoting/                   # Network pivoting
+â”œâ”€â”€ post_exploitation/          # Post-exploit
+â”œâ”€â”€ knowledge/                  # methodology knowledge base
+â”œâ”€â”€ enterprise/                 # Enterprise tools
+â””â”€â”€ tests/                      # 168 tests
 ```
 
 ## Troubleshooting

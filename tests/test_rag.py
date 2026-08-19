@@ -2,7 +2,7 @@
 
 import pytest
 
-from knowledge.cpent_data import (
+from knowledge.methodology_data import (
     KnowledgeEntry,
     KnowledgeCategory,
     get_all_entries,
@@ -14,8 +14,8 @@ from knowledge.rag import RAGClient, RAGConfig, get_rag_client
 from ai.memory import AIMemory, KnowledgeMemory
 
 
-class TestCPENTData:
-    """Tests for CPENT knowledge data."""
+class TestMethodologyData:
+    """Tests for methodology knowledge data."""
 
     def test_all_entries_exist(self):
         entries = get_all_entries()
@@ -78,7 +78,7 @@ class TestRAGClient:
 
     def test_config_defaults(self):
         config = RAGConfig()
-        assert config.collection_name == "cpent_knowledge"
+        assert config.collection_name == "pentest_knowledge"
         assert config.max_results == 5
 
     def test_client_creation(self):
@@ -111,7 +111,7 @@ class TestRAGClient:
         """Test context generation for LLM."""
         client = RAGClient()
         context = client.get_context_for_query("nmap scanning")
-        assert "Relevant CPENT Knowledge" in context
+        assert "Relevant PenTest Knowledge" in context
         assert len(context) > 0
 
     def test_get_stats_not_initialized(self):

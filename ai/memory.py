@@ -163,7 +163,7 @@ class EngagementMemory:
 
 
 class KnowledgeMemory:
-    """Long-term knowledge from CPENT methodology and RAG."""
+    """Long-term knowledge from enterprise methodology and RAG."""
 
     def __init__(self):
         self._entries: list[MemoryEntry] = []
@@ -210,7 +210,7 @@ class KnowledgeMemory:
         """Search by category."""
         if self._rag_client:
             try:
-                from knowledge.cpent_data import KnowledgeCategory
+                from knowledge.methodology_data import KnowledgeCategory
                 cat = KnowledgeCategory(category)
                 results = self._rag_client.search_by_category(cat, limit=limit)
                 return [

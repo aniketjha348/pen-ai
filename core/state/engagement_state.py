@@ -137,7 +137,7 @@ class EngagementState(BaseModel):
     """The complete live state of the engagement."""
 
     id: UUID = Field(default_factory=uuid4)
-    name: str = "CPENT Engagement"
+    name: str = "Enterprise Engagement"
     started_at: datetime = Field(default_factory=datetime.utcnow)
     last_updated: datetime = Field(default_factory=datetime.utcnow)
 
