@@ -405,9 +405,11 @@ CONFIDENCE: medium"""
                     break
                 continue
 
-            # 4. EXECUTE
+            # 4. EXECUTE (with auto-install)
             print(f"\n  [2] Executing: {parsed['next_command'][:100]}...")
-            result = await self.executor.run(parsed['next_command'], timeout=300)
+            # Extract tool name and auto-install if needed
+            tool_name = parsed['next_command'].split()[0] if parsed['next_command'].split() else ""
+            result = await self.executor.run_with_install(parsed['next_command'], tool_name, timeout=300)
             self.commands_run.append(parsed['next_command'])
 
             if result.exit_code == 0:
