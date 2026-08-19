@@ -1,18 +1,18 @@
 # PEN-AI 🎯
 
-**Autonomous AI Penetration Testing Agent for Enterprise Internal Networks**
+**Autonomous AI Penetration Testing Agent for Enterprise Networks**
 
-> An autonomous red-team operator that discovers, enumerates, exploits, pivots, and reports across **any authorized enterprise internal environment**. Zero to advanced, end to end. **100% LLM-driven** — no hardcoded rules, no fixed attack chains.
+> An autonomous red-team operator that discovers, enumerates, exploits, pivots, and reports across **any authorized enterprise environment**. Zero to advanced, end to end. **100% LLM-driven** — no hardcoded rules, no fixed attack chains.
 
 ---
 
 ## ✨ Why PEN-AI
 
 - **Fully LLM-driven, zero hardcoded rules** — the LLM decides every action
+- **Zero-Day Fingerprinting** — identifies unknown services and researches CVEs
+- **Enterprise Attack Chains** — AD, Exchange, SCCM, network infrastructure, databases
 - **3 Operating Modes** — Full Auto, Semi-Auto, Manual
-- **Zero-to-advanced lifecycle** — scan → enum → exploit → privesc → pivot → loot → report
 - **Works against hardened networks** — firewall bypass, ACL analysis, rate limiting
-- **Full attack-surface coverage** — AD, web, binary, IoT, host targets
 - **Evidence & reporting built-in** — HTML + JSON reports with CVSS scoring
 
 ---
@@ -33,8 +33,8 @@ pip install -e ".[dev,rag]"
 # 🔴 MODE 1: FULL AUTONOMOUS (LLM decides everything)
 pen-ai freewill 10.10.10.0/24
 
-# 🟡 MODE 2: SEMI-AUTOMATIC (auto chain, you review)
-pen-ai auto 10.10.10.0/24
+# 🟡 MODE 2: ENTERPRISE (targeted attack chains)
+pen-ai enterprise 10.10.10.0/24 --chain ad
 
 # 🟢 MODE 3: MANUAL (you decide, tool executes)
 pen-ai 10.10.10.0/24
@@ -50,10 +50,41 @@ pen-ai 10.10.10.0/24
 |---------|-------------|---------|
 | `pen-ai <target>` | Interactive REPL | `pen-ai 10.10.10.0/24` |
 | `pen-ai freewill <target>` | Full autonomous mode | `pen-ai freewill 10.10.10.0/24` |
-| `pen-ai auto <target>` | Semi-auto mode | `pen-ai auto 10.10.10.0/24` |
+| `pen-ai enterprise <target>` | Enterprise attack chains | `pen-ai enterprise 10.10.10.0/24 --chain ad` |
+| `pen-ai fingerprint <target> <port> <service>` | Zero-day fingerprinting | `pen-ai fingerprint 10.10.10.5 80 http` |
 | `pen-ai scan <target>` | Quick scan | `pen-ai scan 192.168.1.0/24` |
+| `pen-ai chains` | List enterprise attack chains | `pen-ai chains` |
 | `pen-ai sessions` | List sessions | `pen-ai sessions` |
 | `pen-ai tools` | List tools | `pen-ai tools` |
+
+### Enterprise Attack Chains
+
+```bash
+# Full Active Directory attack chain
+pen-ai enterprise 10.10.10.0/24 --chain ad --username admin --password P@ssw0rd --domain corp.local
+
+# Exchange Server attacks
+pen-ai enterprise 10.10.10.5 --chain exchange
+
+# Run ALL enterprise chains automatically
+pen-ai enterprise 10.10.10.0/24 --chain auto
+
+# Zero-day fingerprinting
+pen-ai fingerprint 10.10.10.5 80 http
+```
+
+### Available Enterprise Chains
+
+| Chain | Description |
+|-------|-------------|
+| `ad` | Full AD kill chain: enum → kerberoast → DCSync → domain compromise |
+| `exchange` | Exchange attacks: ProxyShell, ProxyLogon, ProxyNotShell |
+| `sccm` | SCCM/ConfigMgr attacks |
+| `network` | Router/switch/firewall attacks (SNMP, default creds) |
+| `database` | MySQL, MSSQL, PostgreSQL, Oracle attacks |
+| `aws` | AWS cloud attacks (S3, EC2 metadata) |
+| `azure` | Azure cloud attacks |
+| `auto` | Run ALL applicable chains |
 
 ### REPL Commands (Interactive Mode)
 
@@ -74,6 +105,11 @@ POST-EXPLOIT:
   pivot                  - Find and pivot to new networks
   shell <type>           - Generate reverse shell (bash/python/php)
 
+ENTERPRISE:
+  enterprise ad          - Run AD attack chain
+  enterprise exchange    - Run Exchange attack chain
+  fingerprint <port>     - Zero-day fingerprint a service
+
 AUTO CHAINS:
   auto                   - Full auto: scan → enum → exploit → privesc → pivot → loot
   auto-recon             - Auto recon chain
@@ -90,12 +126,7 @@ SESSION:
   sessions               - List saved sessions
   resume <session_id>    - Resume previous session
   replay                 - List replayable sessions
-  replay <session_id>    - Show session details
   set target <ip>        - Set target (auto-scans)
-
-TOOLS:
-  install <tool>         - Install a tool
-  run <command>          - Run any command (safety checked)
 
 OTHER:
   help                   - Show this help
@@ -104,139 +135,63 @@ OTHER:
 
 ---
 
-## 🔄 Three Operating Modes
+## 🏢 Enterprise Pentesting
 
-### 🔴 Mode 1: Full Autonomous (`freewill`)
-
-The LLM decides **everything**. No human input needed.
+### Active Directory Full Kill Chain
 
 ```bash
-pen-ai freewill 10.10.10.0/24
-```
-
-**What happens:**
-1. LLM decides scan strategy → executes
-2. LLM analyzes results → decides next step
-3. LLM identifies vulnerabilities → picks exploits
-4. LLM exploits → evaluates success
-5. LLM post-exploits → harvests credentials
-6. LLM pivots → discovers new networks
-7. LLM generates report
-
-**No hardcoded rules. Pure LLM intelligence.**
-
-### 🟡 Mode 2: Semi-Automatic (`auto`)
-
-Tool runs the full chain automatically, you review results.
-
-```bash
-pen-ai auto 10.10.10.0/24
+pen-ai enterprise 10.10.10.0/24 --chain ad --username admin --password P@ssw0rd --domain corp.local
 ```
 
 **What happens:**
 ```
-[1/6] Auto-Scanning...        ✓ Found 5 hosts, 12 services
-[2/6] Auto-Enumerating...     ✓ Vulnerability checks complete
-[3/6] Auto-Exploiting...      ✓ 2 services exploited
-[4/6] Auto-PrivEsc...         ✓ Root access on 1 host
-[5/6] Auto-Pivoting...        ✓ 1 new network discovered
-[6/6] Auto-Reporting...       ✓ HTML report generated
+1. Domain Enumeration     → LDAP/SMB/DNS enumeration
+2. User Enumeration       → Find all domain users
+3. Group Analysis         → Identify high-value groups
+4. Kerberoasting          → Extract service account hashes
+5. Password Spraying      → Test common passwords
+6. Lateral Movement       → PsExec, WMIExec, SMBExec
+7. Privilege Escalation   → DCSync, ACL abuse
+8. Domain Compromise      → KRBTGT hash extraction
 ```
 
-### 🟢 Mode 3: Manual (Interactive REPL)
-
-You decide every step. Tool executes your commands.
+### Exchange Server Attacks
 
 ```bash
-pen-ai 10.10.10.0/24
+pen-ai enterprise 10.10.10.5 --chain exchange
 ```
 
+**What happens:**
 ```
-pen-ai:10.10.10.0 [0h 0s 0c] > scan 10.10.10.0/24
-pen-ai:10.10.10.0 [5h 12s 0c] > exploit
-pen-ai:10.10.10.0 [5h 12s 2c] [root] > privesc
-pen-ai:10.10.10.0 [5h 12s 2c] [admin] > loot
-pen-ai:10.10.10.0 [5h 12s 2c] [admin] > report
+1. Exchange Enumeration   → EWS, OWA endpoint discovery
+2. Vulnerability Check    → ProxyShell, ProxyLogon, ProxyNotShell
+3. Exploitation           → Remote code execution
 ```
 
----
-
-## 🔄 Auto Chains
-
-### Full Auto Chain
+### Zero-Day Fingerprinting
 
 ```bash
-# In REPL:
-auto
-
-# Or from CLI:
-pen-ai auto 10.10.10.0/24
+pen-ai fingerprint 10.10.10.5 80 http
 ```
 
-**Chain flow:**
+**What happens:**
 ```
-SCAN → ENUM → EXPLOIT → PRIVESC → PIVOT → LOOT → REPORT
-```
-
-Each step:
-- Runs automatically
-- Shows progress
-- Updates state
-- Continues to next step
-- Stops on completion or error
-
-### Auto Recon Chain
-
-```bash
-auto-recon
+1. Banner Grabbing        → Identify service banner
+2. Deep Fingerprint       → Service-specific fingerprinting
+3. Version Detection      → Exact version identification
+4. CVE Research           → NVD, exploit-db, searchsploit
+5. Exploit Matching       → Find available exploits
 ```
 
-**Chain flow:**
-```
-HOST_DISCOVERY → PORT_SCAN → SERVICE_ENUM → OS_DETECT → VERSION_DETECT
-```
-
-### Auto Exploit Chain
-
-```bash
-auto-exploit
-```
-
-**Chain flow:**
-```
-FOR EACH SERVICE:
-  → CHECK_VULNERABILITY
-  → SELECT_EXPLOIT
-  → EXECUTE_EXPLOIT
-  → CHECK_SUCCESS
-  → RECORD_FINDING
-```
-
-### Auto Post-Exploit Chain
-
-```bash
-auto-post
-```
-
-**Chain flow:**
-```
-PRIVESC → LOOT → CREDENTIAL_HARVEST → PIVOT_DISCOVERY → NETWORK_SCAN
-```
-
----
-
-## 🗺️ Enterprise Coverage
-
-| Target Area | Capabilities |
-|-------------|--------------|
-| **Network** | Host discovery, port/service scanning, OS detection, subnet mapping |
-| **Firewall / Filter** | Filter detection, ICMP analysis, source-port bypass |
-| **Active Directory** | LDAP/SMB enum, kerberoasting, DCSync, pass-the-hash |
-| **Web Applications** | SQLi, XSS, command injection, LFI, API enum |
-| **IoT** | Device discovery, firmware analysis, protocol testing |
-| **Binary** | checksec, static/dynamic analysis, buffer overflow |
-| **Host** | SUID, cron, kernel exploits, credential hunting |
-| **Post-Exploit** | SSH sessions, credential harvesting, SOCKS pivots |
+**Supported Services:**
+- HTTP/HTTPS (Apache, nginx, IIS, Tomcat, Jenkins, WebLogic)
+- SSH (OpenSSH version analysis)
+- SMB (signing checks, anonymous access)
+- LDAP (anonymous bind detection)
+- FTP (anonymous access)
+- MySQL/MSSQL/PostgreSQL
+- RDP (BlueKeep detection)
+- Generic (banner analysis + nmap scripts)
 
 ---
 
@@ -245,16 +200,35 @@ PRIVESC → LOOT → CREDENTIAL_HARVEST → PIVOT_DISCOVERY → NETWORK_SCAN
 ```
 1. RECON          LLM decides scan strategy
 2. ENUMERATE      LLM picks enumeration tools
-3. FILTER ANALYZE LLM analyzes filtering
-4. IDENTIFY       LLM reasons about vulnerabilities
-5. EXPLOIT        LLM selects exploitation tools
-6. POST-EXPLOIT   LLM explores compromised host
-7. PIVOT          LLM discovers routes
-8. LOOT           LLM harvests credentials
-9. REPORT         LLM writes findings
+3. FINGERPRINT    Zero-day identification of unknown services
+4. CVE RESEARCH   NVD, exploit-db, searchsploit matching
+5. IDENTIFY       LLM reasons about vulnerabilities
+6. EXPLOIT        LLM selects exploitation tools
+7. POST-EXPLOIT   LLM explores compromised host
+8. PIVOT          LLM discovers routes
+9. LOOT           LLM harvests credentials
+10. REPORT        LLM writes findings with evidence
 ```
 
 **No phase is forced.** The LLM adapts to what's discovered.
+
+---
+
+## 🗺️ Enterprise Coverage
+
+| Target Area | Capabilities |
+|-------------|--------------|
+| **Active Directory** | LDAP/SMB enum, kerberoasting, DCSync, pass-the-hash, BloodHound |
+| **Exchange Server** | ProxyShell, ProxyLogon, ProxyNotShell, credential extraction |
+| **SCCM/ConfigMgr** | Site server enumeration, credential extraction |
+| **Web Applications** | SQLi, XSS, command injection, LFI, API enum, version detection |
+| **Network Infrastructure** | SNMP, default creds, router/switch/firewall attacks |
+| **Databases** | MySQL, MSSQL, PostgreSQL, Oracle attacks |
+| **Cloud (AWS/Azure)** | S3 buckets, EC2 metadata, Azure management |
+| **IoT** | Device discovery, firmware analysis, protocol testing |
+| **Binary** | checksec, static/dynamic analysis, buffer overflow |
+| **Host** | SUID, cron, kernel exploits, credential hunting |
+| **Post-Exploit** | SSH sessions, credential harvesting, SOCKS pivots |
 
 ---
 
@@ -262,7 +236,7 @@ PRIVESC → LOOT → CREDENTIAL_HARVEST → PIVOT_DISCOVERY → NETWORK_SCAN
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    LLM (MiMo/DeepSeek/Hy3)          │
+│                    LLM (MiMo/DeepSeek)              │
 │              Decides EVERYTHING                      │
 └──────────────────────┬──────────────────────────────┘
                        │
@@ -277,9 +251,52 @@ PRIVESC → LOOT → CREDENTIAL_HARVEST → PIVOT_DISCOVERY → NETWORK_SCAN
          └─────────────┼─────────────┘
                        │
               ┌────────▼────────┐
-              │ Engagement State│
-              │ (Digital Twin)  │
+              │ Enterprise      │
+              │ Attack Chains   │
+              │ (AD, Exchange)  │
               └─────────────────┘
+                       │
+              ┌────────▼────────┐
+              │ Zero-Day        │
+              │ Fingerprinting  │
+              │ (CVE Research)  │
+              └─────────────────┘
+```
+
+---
+
+## 📁 Project Structure
+
+```
+pen-ai/
+├── app/
+│   ├── cli/main.py              # CLI (freewill, enterprise, scan, fingerprint)
+│   └── terminal/repl.py         # Interactive REPL
+├── ai/
+│   ├── freewill_agent.py        # Full autonomous agent (enterprise-enhanced)
+│   ├── autonomous_executor.py   # Command execution with auto-install
+│   ├── brain.py                 # Observation layer
+│   ├── credential_manager.py    # Credential tracking
+│   └── llm_client.py            # LLM API client
+├── enterprise/
+│   ├── zeroday_fingerprint.py   # Zero-day fingerprinting engine
+│   ├── attack_chains.py         # Enterprise attack chains (AD, Exchange, etc.)
+│   ├── tools.py                 # Enterprise tool integrations
+│   └── bloodhound_queries.py    # BloodHound integration
+├── core/
+│   ├── safety.py                # Command safety checks
+│   └── session_replay.py        # Session replay
+├── recon/
+│   ├── network.py               # Host/port scanning
+│   ├── network_viz.py           # ASCII network maps
+│   └── firewall_analysis.py     # Filter detection
+├── exploitation/
+│   ├── modules/                 # ssh, smb, web, privesc
+│   └── engine.py                # Exploitation engine
+├── reporting/
+│   ├── html_report.py           # HTML report generation
+│   └── cvss.py                  # CVSS scoring
+└── tests/                       # 208 tests
 ```
 
 ---
@@ -305,41 +322,6 @@ pytest tests/ -v
 ```
 
 Current suite: **208 tests** (all passing).
-
----
-
-## 📁 Project Structure
-
-```
-pen-ai/
-├── app/
-│   ├── cli/main.py              # CLI (freewill, auto, scan, sessions, tools)
-│   └── terminal/repl.py         # Interactive REPL with 3 modes
-├── ai/
-│   ├── freewill_agent.py        # Full autonomous LLM-driven agent
-│   ├── autonomous_agent.py      # Core agent logic
-│   ├── brain.py                 # Observation layer (no hardcoded rules)
-│   ├── planner.py               # Action generation (no fixed tools)
-│   ├── credential_manager.py    # Credential tracking
-│   └── llm_client.py            # LLM API client
-├── core/
-│   ├── state/engagement_state.py
-│   ├── safety.py                # Command safety checks
-│   ├── session_replay.py        # Session replay
-│   └── orchestrator/pipeline.py
-├── recon/
-│   ├── network.py               # Host/port scanning
-│   ├── network_viz.py           # ASCII network maps
-│   └── firewall_analysis.py     # Filter detection
-├── exploitation/
-│   ├── modules/                 # ssh, smb, web, privesc
-│   └── engine.py                # Exploitation engine
-├── reporting/
-│   ├── html_report.py           # HTML report generation
-│   ├── generator.py
-│   └── cvss.py                  # CVSS scoring
-└── tests/                       # 208 tests
-```
 
 ---
 

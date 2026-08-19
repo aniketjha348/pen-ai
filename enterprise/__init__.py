@@ -10,6 +10,8 @@ from enterprise.tools import (
     SQLMapIntegration,
     HydraIntegration,
 )
+from enterprise.zeroday_fingerprint import ZeroDayFingerprint, ServiceFingerprint, VulnMatch
+from enterprise.attack_chains import EnterpriseAttackChains, AttackChain
 
 __all__ = [
     "EnterpriseTools",
@@ -20,4 +22,9 @@ __all__ = [
     "LinPEASIntegration",
     "SQLMapIntegration",
     "HydraIntegration",
+    "ZeroDayFingerprint",
+    "ServiceFingerprint",
+    "VulnMatch",
+    "EnterpriseAttackChains",
+    "AttackChain",
 ]

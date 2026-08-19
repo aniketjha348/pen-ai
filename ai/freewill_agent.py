@@ -1,19 +1,16 @@
-"""FreewillAgent - Fully LLM-Driven Autonomous Penetration Testing Agent.
+"""FreewillAgent - Fully LLM-Driven Autonomous Penetration Testing Agent
 
-This agent uses the LLM as its brain for EVERY decision:
-- Scanning strategy
-- Service analysis
-- Vulnerability identification
-- Exploit selection
-- Post-exploitation
-- Pivoting
-- Reporting
-
-No hardcoded rules. No fixed attack chains. Pure LLM intelligence.
+Enterprise-enhanced version with:
+- Zero-day fingerprinting engine
+- Enterprise attack chains (AD, Exchange, SCCM, etc.)
+- CVE research and exploit matching
+- Service version fingerprinting
+- Full autonomous decision making by LLM
 """
 
 import asyncio
 import json
+import os
 import re
 from datetime import datetime
 from typing import Optional
@@ -23,25 +20,40 @@ from ai.brain import AttackSurface
 from ai.credential_manager import CredentialManager
 from reporting.html_report import HTMLReportGenerator
 
+try:
+    from enterprise.zeroday_fingerprint import ZeroDayFingerprint
+    from enterprise.attack_chains import EnterpriseAttackChains
+    HAS_ENTERPRISE = True
+except ImportError:
+    HAS_ENTERPRISE = False
+
 
 class FreewillAgent:
-    """Fully autonomous LLM-driven penetration testing agent.
+    """Fully autonomous LLM-driven enterprise penetration testing agent.
 
     This agent:
-    1. Receives a target
+    1. Receives a target (IP, subnet, domain, URL)
     2. Asks the LLM what to do
     3. Executes the LLM's command
     4. Feeds output back to LLM
     5. LLM decides next action
     6. Repeats until done
 
-    The LLM decides EVERYTHING. No hardcoded logic.
+    Enterprise capabilities:
+    - Zero-day fingerprinting (unknown services)
+    - CVE research (NVD, exploit-db, searchsploit)
+    - Enterprise attack chains (AD, Exchange, SCCM, etc.)
+    - Service version matching to known exploits
     """
 
     def __init__(self, llm_client=None):
         self.executor = AutonomousExecutor(timeout=300)
         self.cred_manager = CredentialManager()
         self.llm = llm_client
+
+        # Enterprise modules
+        self.zeroday = ZeroDayFingerprint(self.executor) if HAS_ENTERPRISE else None
+        self.enterprise_chains = EnterpriseAttackChains(self.executor) if HAS_ENTERPRISE else None
 
         # Engagement state
         self.target = ""
@@ -53,12 +65,13 @@ class FreewillAgent:
         self.pivoted = []
         self.findings = []
         self.commands_run = []
+        self.vulns = []
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.start_time = datetime.now()
 
         # LLM conversation memory
         self.memory = []
-        self.max_memory = 50  # Keep last N exchanges
+        self.max_memory = 50
 
     def get_system_prompt(self) -> str:
         """Get the system prompt for the LLM."""
@@ -69,28 +82,46 @@ class FreewillAgent:
             "credentials_found": len(self.credentials),
             "access_level": self.access_map,
             "pivoted_networks": self.pivoted,
+            "vulnerabilities_found": len(self.vulns),
             "findings": len(self.findings),
             "commands_run": len(self.commands_run),
         }, indent=2, default=str)
 
-        return f"""You are PEN-AI, an expert autonomous penetration tester. You have FULL CONTROL of a terminal.
+        enterprise_context = ""
+        if HAS_ENTERPRISE:
+            enterprise_context = """
+ENTERPRISE CAPABILITIES AVAILABLE:
+- Zero-day fingerprinting: Identify unknown services and research CVEs
+- Enterprise attack chains: AD, Exchange, SCCM, network infrastructure
+- CVE research: NVD, exploit-db, searchsploit
+- Service version matching: Find exploits for specific versions
+- Impacket suite: Kerberoast, DCSync, Pass-the-Hash, PsExec, WMIExec
+- CrackMapExec: SMB, LDAP, WinRM attacks
+- BloodHound: AD attack path analysis
+- Metasploit: Full exploitation framework
+"""
+
+        return f"""You are PEN-AI, an EXPERT autonomous enterprise penetration tester with FULL CONTROL of a terminal.
 
 TARGET: {self.target}
 SCOPE: {self.scope}
 
 CURRENT STATE:
 {state_json}
-
+{enterprise_context}
 YOUR MISSION:
-Discover vulnerabilities in the target environment and exploit them. You are authorized to test this environment.
+Perform a COMPREHENSIVE penetration test of the target environment. You are authorized to test this environment.
+Find ALL vulnerabilities and exploit them. Do NOT stop early.
 
 DECISION FRAMEWORK:
-1. OBSERVE: Run commands to discover hosts, ports, services, versions
-2. ANALYZE: Think about what each service/version means for security
-3. PLAN: Decide the best attack vector based on what you found
-4. EXECUTE: Run the attack command
-5. EVALUATE: Check if the attack succeeded
-6. ADAPT: If it failed, try a different approach. If it succeeded, go deeper.
+1. RECON: Discover hosts, ports, services, versions, OS
+2. ENUMERATE: Deep enumerate every service found
+3. FINGERPRINT: Identify exact versions, custom services, unusual ports
+4. VULNERABILITY RESEARCH: Research CVEs for each service+version
+5. EXPLOIT: Match exploits to vulnerabilities and execute
+6. POST-EXPLOIT: Enumerate compromised systems, harvest credentials
+7. PIVOT: Discover and attack new networks
+8. REPORT: Document all findings
 
 AVAILABLE TOOLS (install if missing):
 - nmap, masscan, rustscan (scanning)
@@ -99,10 +130,14 @@ AVAILABLE TOOLS (install if missing):
 - hydra, medusa, john, hashcat (cracking)
 - impacket suite (AD attacks: secretsdump, psexec, wmiexec, kerberoast)
 - metasploit framework (exploitation)
+- crackmapexec (AD attacks)
+- bloodhound-python (AD attack paths)
 - linpeas, linenum (privesc)
 - chisel, ligolo (pivoting)
 - curl, wget, python3 (scripting)
 - sshpass, ssh (remote access)
+- searchsploit (exploit database)
+- odat (Oracle attacks)
 
 OUTPUT FORMAT:
 Respond with EXACTLY this format:
@@ -124,15 +159,27 @@ IMPORTANT RULES:
 - If brute force fails, try default creds. If default creds fail, try null session.
 - ALWAYS keep going until you've tried: scanning, enum, exploit, privesc, pivot, loot
 - Only stop when you've exhausted ALL options on ALL hosts
+- For enterprise: check AD, Exchange, SCCM, database, network infrastructure
+- For web: check SQLi, XSS, LFI, RFI, command injection, file upload
+- For unknown services: fingerprint them, research CVEs, try exploits
 - Remember: the goal is to find as many vulnerabilities as possible
 """
 
     def get_analysis_prompt(self, command: str, output: str, exit_code: int) -> str:
         """Get the analysis prompt for LLM to decide next action."""
+        # Include enterprise context in analysis
+        enterprise_hint = ""
+        if HAS_ENTERPRISE and self.zeroday:
+            # Check if we found new services that need fingerprinting
+            new_services = re.findall(r"(\d+)/(tcp|udp)\s+open\s+(\S+)", output)
+            if new_services:
+                enterprise_hint = "\n\nNEW SERVICES DETECTED. Consider fingerprinting them for zero-day vulnerabilities."
+
         return f"""Command executed: {command}
 Exit code: {exit_code}
 Output (first 3000 chars):
 {output[:3000]}
+{enterprise_hint}
 
 Based on this output, what should I do next?
 Respond with EXACTLY this format:
@@ -153,13 +200,13 @@ REASONING: [Why you're stopping]
         """Ask LLM what to do next based on current state."""
         system_prompt = self.get_system_prompt()
 
-        # Build user message with recent history
         user_msg = "Current state summary:\n"
         user_msg += f"- Target: {self.target}\n"
         user_msg += f"- Hosts found: {len(self.hosts)}\n"
         user_msg += f"- Services: {sum(len(v) for v in self.services.values())}\n"
         user_msg += f"- Credentials: {len(self.credentials)}\n"
         user_msg += f"- Access: {self.access_map}\n"
+        user_msg += f"- Vulnerabilities: {len(self.vulns)}\n"
         user_msg += f"- Commands run: {len(self.commands_run)}\n\n"
         user_msg += "What should I do next? Give me the exact command to run."
 
@@ -232,7 +279,7 @@ REASONING: [Why you're stopping]
                 self.hosts.append(h)
 
         # Extract services
-        services = re.findall(r"(\d+)/(\w+)\s+open\s+(\S+)(?:\s+(.*))?", output)
+        services = re.findall(r"(\d+)/(tcp|udp)\s+open\s+(\S+)(?:\s+(.*))?", output)
         for port, proto, svc, ver in services:
             host = self.target
             for h in self.hosts:
@@ -241,7 +288,12 @@ REASONING: [Why you're stopping]
                     break
             if host not in self.services:
                 self.services[host] = []
-            svc_info = {"port": int(port), "service": svc, "version": ver.strip() if ver else ""}
+            svc_info = {
+                "port": int(port),
+                "protocol": proto,
+                "service": svc,
+                "version": ver.strip() if ver else "",
+            }
             if svc_info not in self.services[host]:
                 self.services[host].append(svc_info)
 
@@ -270,6 +322,74 @@ REASONING: [Why you're stopping]
         for route in routes:
             if route not in self.pivoted and route != self.target:
                 self.pivoted.append(route)
+
+        # Extract vulnerabilities from output
+        cves = re.findall(r"(CVE-\d{4}-\d+)", output)
+        for cve in cves:
+            if cve not in [v.get("cve_id") for v in self.vulns]:
+                self.vulns.append({
+                    "cve_id": cve,
+                    "source": "output",
+                    "command": command[:100],
+                })
+
+    async def enterprise_fingerprint(self, host: str, port: int, service: str) -> dict:
+        """Enterprise zero-day fingerprinting for a service."""
+        if not HAS_ENTERPRISE or not self.zeroday:
+            return {"error": "Enterprise module not available"}
+
+        print(f"\n  [FINGERPRINT] Analyzing {host}:{port} ({service})...")
+
+        # Deep fingerprint the service
+        fp = await self.zeroday.deep_fingerprint(host, port, service)
+
+        # Research CVEs
+        version = fp.get("version_info", "")
+        if version:
+            vulns = await self.zeroday.research_cves(service, version)
+            for v in vulns:
+                self.vulns.append({
+                    "cve_id": v.cve_id,
+                    "title": v.title,
+                    "severity": v.severity,
+                    "cvss": v.cvss,
+                    "exploit_available": v.exploit_available,
+                    "service": v.service,
+                    "version": v.version,
+                    "source": v.source,
+                })
+
+        # Match exploits
+        if self.zeroday.vulns:
+            exploits = await self.zeroday.match_exploits(self.zeroday.vulns)
+            fp["exploits_matched"] = exploits
+
+        return fp
+
+    async def enterprise_attack_chain(self, chain_type: str, target: str, creds: dict = None) -> dict:
+        """Run an enterprise attack chain."""
+        if not HAS_ENTERPRISE or not self.enterprise_chains:
+            return {"error": "Enterprise module not available"}
+
+        print(f"\n  [ENTERPRISE] Running {chain_type} attack chain on {target}...")
+
+        if chain_type == "ad":
+            return await self.enterprise_chains.ad_full_chain(target, creds)
+        elif chain_type == "exchange":
+            return await self.enterprise_chains.exchange_chain(target, creds)
+        elif chain_type == "sccm":
+            return await self.enterprise_chains.sccm_chain(target, creds)
+        elif chain_type == "network":
+            return await self.enterprise_chains.network_infra_chain(target, creds)
+        elif chain_type == "database":
+            service = creds.get("service", "mysql") if creds else "mysql"
+            return await self.enterprise_chains.database_chain(target, service, creds)
+        elif chain_type == "aws":
+            return await self.enterprise_chains.aws_chain(target, creds)
+        elif chain_type == "azure":
+            return await self.enterprise_chains.azure_chain(target, creds)
+        else:
+            return {"error": f"Unknown chain type: {chain_type}"}
 
     def is_safe_command(self, cmd: str) -> bool:
         """Check if command is safe to run."""
@@ -330,7 +450,7 @@ CONFIDENCE: medium"""
     def _fallback_analyze(self, command: str, output: str) -> str:
         """Fallback analysis when no LLM is available - always suggests next step."""
         hosts_found = len(re.findall(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", output))
-        services_found = len(re.findall(r"\d+/\w+\s+open\s+\S+", output))
+        services_found = len(re.findall(r"\d+/(tcp|udp)\s+open\s+\S+", output))
 
         if hosts_found > 0 and "nmap -sn" in command:
             return f"""ANALYSIS: Found {hosts_found} live hosts. Now need to enumerate services.
@@ -365,16 +485,18 @@ CONFIDENCE: medium"""
         print(f"  Target: {target}")
         print(f"  Scope: {self.scope}")
         print(f"  Mode: Fully Autonomous (LLM-Driven)")
+        if HAS_ENTERPRISE:
+            print(f"  Enterprise: Enabled (AD, Exchange, SCCM, Zero-Day)")
         print(f"{'='*60}\n")
 
         cycle = 0
         consecutive_failures = 0
-        max_failures = 20  # Keep trying even if many commands fail
+        max_failures = 20
 
         while cycle < max_cycles:
             cycle += 1
             print(f"\n{'─'*60}")
-            print(f"  CYCLE {cycle} | Hosts: {len(self.hosts)} | Services: {sum(len(v) for v in self.services.values())} | Creds: {len(self.credentials)} | Access: {self.access_map}")
+            print(f"  CYCLE {cycle} | Hosts: {len(self.hosts)} | Services: {sum(len(v) for v in self.services.values())} | Creds: {len(self.credentials)} | Vulns: {len(self.vulns)}")
             print(f"{'─'*60}")
 
             # 1. OBSERVE - Ask LLM what to do
@@ -388,7 +510,6 @@ CONFIDENCE: medium"""
 
             # 2. Check if done - but only if LLM explicitly says so with reasoning
             if parsed['next_command'].lower() in ['none', 'done', 'stop', 'complete']:
-                # Don't stop immediately - ask LLM to confirm
                 if cycle > 10 and len(self.credentials) > 0:
                     print(f"\n  [DONE] LLM decided engagement is complete.")
                     break
@@ -407,7 +528,6 @@ CONFIDENCE: medium"""
 
             # 4. EXECUTE (with auto-install)
             print(f"\n  [2] Executing: {parsed['next_command'][:100]}...")
-            # Extract tool name and auto-install if needed
             tool_name = parsed['next_command'].split()[0] if parsed['next_command'].split() else ""
             result = await self.executor.run_with_install(parsed['next_command'], tool_name, timeout=300)
             self.commands_run.append(parsed['next_command'])
@@ -434,7 +554,21 @@ CONFIDENCE: medium"""
             # 6. UPDATE STATE
             self.update_state_from_output(parsed['next_command'], output)
 
-            # 7. ANALYZE - Ask LLM what the output means
+            # 7. ENTERPRISE FINGERPRINTING (if new services found)
+            if HAS_ENTERPRISE and self.zeroday:
+                new_services = re.findall(r"(\d+)/(tcp|udp)\s+open\s+(\S+)", output)
+                for port_str, proto, service in new_services[:5]:  # Limit to 5
+                    port = int(port_str)
+                    host = self.target
+                    for h in self.hosts:
+                        if h in parsed['next_command']:
+                            host = h
+                            break
+                    fp = await self.enterprise_fingerprint(host, port, service)
+                    if fp.get("exploits_matched"):
+                        print(f"  [ZERO-DAY] Found {len(fp['exploits_matched'])} potential exploits for {service}")
+
+            # 8. ANALYZE - Ask LLM what the output means
             print(f"\n  [3] Analyzing output...")
             analysis = await self.analyze_output(parsed['next_command'], result)
             analysis_parsed = self.parse_llm_response(analysis)
@@ -472,6 +606,7 @@ CONFIDENCE: medium"""
         print(f"  Credentials: {len(self.credentials)}")
         print(f"  Access: {self.access_map}")
         print(f"  Networks: {len(self.pivoted)}")
+        print(f"  Vulnerabilities: {len(self.vulns)}")
         print(f"{'='*60}")
 
         if self.hosts:
@@ -489,8 +624,15 @@ CONFIDENCE: medium"""
             for c in self.credentials:
                 print(f"    [{c.get('type', '?')}] {c.get('username', '?')}: {str(c.get('value', ''))[:40]}")
 
+        if self.vulns:
+            print(f"\n  VULNERABILITIES:")
+            for v in self.vulns[:20]:
+                severity = v.get('severity', 'info').upper()
+                cve = v.get('cve_id', 'N/A')
+                print(f"    [{severity}] {cve}: {v.get('title', 'Unknown')[:60]}")
+
         # Generate HTML report
-        report = HTMLReportGenerator(title="PEN-AI Autonomous Engagement Report")
+        report = HTMLReportGenerator(title="PEN-AI Enterprise Engagement Report")
         report.load_from_state({
             "target": self.target,
             "session_id": self.session_id,
@@ -508,6 +650,15 @@ CONFIDENCE: medium"""
                 severity="critical",
                 description=f"Gained {level} access on {host}",
             )
+
+        for v in self.vulns:
+            if v.get("cve_id") and v["cve_id"] != "N/A":
+                report.add_finding(
+                    title=v.get("title", "Vulnerability found"),
+                    severity=v.get("severity", "info"),
+                    description=f"{v.get('cve_id', 'N/A')}: {v.get('description', 'See details')}",
+                    cvss=v.get("cvss", 0.0),
+                )
 
         import tempfile
         report_dir = os.path.join(tempfile.gettempdir(), f"penai_{self.session_id}")
@@ -531,6 +682,7 @@ CONFIDENCE: medium"""
             "access_map": self.access_map,
             "pivoted": self.pivoted,
             "findings": self.findings,
+            "vulns": self.vulns,
             "commands_run": self.commands_run,
             "memory": self.memory,
             "duration_minutes": int((datetime.now() - self.start_time).total_seconds() / 60),
