@@ -31,7 +31,12 @@ class ReportGenerator:
         self._attack_narrative: list[str] = []
 
     def add_finding(self, finding: Finding) -> None:
-        """Add a finding to the report."""
+        """Add a finding to the report, auto-scoring CVSS when missing."""
+        if finding.cvss_score is None:
+            from reporting.cvss import cvss_score, vector_from_finding
+
+            vector = vector_from_finding({"severity": finding.severity})
+            finding.cvss_score = cvss_score(vector)
         self._findings.append(finding)
 
     def add_narrative_step(self, step: str) -> None:
