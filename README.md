@@ -197,6 +197,34 @@ PEN-AI does not assume a flat network. It expects segmentation, filtering, and d
 
 ---
 
+## ⚙️ DeepEngage: One-Shot Chained Engagement
+
+The `deep_engage` tool runs the entire zero-to-advanced lifecycle against a target in one call — no LLM required, deterministic, and testable:
+
+```
+RECON → FILTER_ANALYZE → ENUMERATE → EXPLOIT → POST_EXPLOIT → PIVOT → REPORT
+```
+
+- **RECON** — host discovery + port/service scan
+- **FILTER_ANALYZE** — identifies the firewall/filter in front of the target and records it as a finding (e.g. ICMP Type 3 Code 13 → Cisco/stateless ACL)
+- **ENUMERATE** — flags risky services (FTP, telnet, SNMP, etc.) as vulnerabilities
+- **EXPLOIT** — attempts every open service via the exploit modules and promotes access on success
+- **POST_EXPLOIT** — documents the beachhead and harvested credentials
+- **PIVOT** — records pivot points once access is held
+- **REPORT** — writes Markdown + JSON report artifacts to `reports/`
+
+```python
+from core.orchestrator.pipeline import DeepEngagePipeline
+
+async def go():
+    payload = await DeepEngagePipeline(target="10.10.20.5").run()
+    print(payload["artifacts"])  # paths to report.md / report.json
+```
+
+The pipeline's scan/filter/exploit runners are injectable (sync or async), so it runs end-to-end offline in tests and degrades gracefully on hosts without the Kali toolchain.
+
+---
+
 
 ## 🏗️ Architecture
 
