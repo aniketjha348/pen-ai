@@ -205,15 +205,23 @@ class BloodhoundIntegration:
         dc_ip: str,
         target_user: str,
     ) -> dict:
-        """Find shortest path to target user."""
-        # Collect data first
+        """Find shortest attack path to a target user via neo4j."""
+        from enterprise.bloodhound_queries import connect_bloodhound, find_shortest_paths
+
+        if not connect_bloodhound():
+            connect_bloodhound(
+                os.environ.get("BLOODHOUND_URI", "bolt://localhost:7687"),
+                os.environ.get("BLOODHOUND_USER", "neo4j"),
+                os.environ.get("BLOODHOUND_PASSWORD", "bloodhound"),
+            )
         await BloodhoundIntegration.collect(domain, username, password, dc_ip, "session,group")
 
-        # Query would be done via neo4j/bloodhound API
+        paths = find_shortest_paths(domain, limit=5)
         return {
             "success": True,
             "target": target_user,
-            "note": "Data collected. Use Bloodhound GUI to visualize attack paths.",
+            "attack_paths": paths,
+            "note": "Shortest attack paths from collected neo4j data.",
         }
 
 
