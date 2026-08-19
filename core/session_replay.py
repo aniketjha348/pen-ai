@@ -10,7 +10,7 @@ class SessionReplay:
     """Replay and review previous engagement sessions."""
 
     def __init__(self, sessions_dir: str = None):
-        self.sessions_dir = sessions_dir or os.path.join(os.path.expanduser("~"), ".penai", "sessions")
+        self.sessions_dir = sessions_dir or os.path.join(os.path.expanduser("~"), ".pen-ai", "sessions")
         os.makedirs(self.sessions_dir, exist_ok=True)
 
     def list_sessions(self) -> list[dict]:

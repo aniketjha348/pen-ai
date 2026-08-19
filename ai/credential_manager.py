@@ -59,7 +59,7 @@ class CredentialManager:
 
     def __init__(self, storage_dir: str = None):
         self.credentials: list[Credential] = []
-        self.storage_dir = storage_dir or os.path.join(os.path.expanduser("~"), ".penai", "credentials")
+        self.storage_dir = storage_dir or os.path.join(os.path.expanduser("~"), ".pen-ai", "credentials")
         os.makedirs(self.storage_dir, exist_ok=True)
 
     def add(self, username: str = "", password: str = "", hash_value: str = "",
