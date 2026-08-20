@@ -160,6 +160,8 @@ class PenAIRepl:
                     self._cmd_brain()
                 elif user_input.lower() == "think":
                     await self._cmd_think()
+                elif user_input.lower().startswith("think "):
+                    await self._cmd_think(user_input[6:].strip())
                 elif user_input.lower().startswith("run "):
                     await self._cmd_run(user_input[4:].strip())
                 elif user_input.lower() == "install":
@@ -859,8 +861,16 @@ class PenAIRepl:
                 print(f"    {i}")
         print()
 
-    async def _cmd_think(self):
-        """Let the AI Brain decide the next moves based on current state."""
+    async def _cmd_think(self, mode: str = ""):
+        """Let the AI Brain decide the next moves based on current state.
+
+        Modes:
+        - think            : suggest next safe moves
+        - think simulate   : suggest + alternatives + lessons
+        - think explain    : same as simulate, but phrased as analysis
+        - think run        : execute ONLY the top suggested move (single step)
+        - think auto       : alias of think run (single safe step, not a loop)
+        """
         if not self.target:
             print("  No target set. Use: set target <ip>")
             return
@@ -873,6 +883,11 @@ class PenAIRepl:
             if not decisions:
                 print("  No decisions produced.")
                 return
+
+            mode = (mode or "").strip().lower()
+            simulate = mode in {"simulate", "explain", "run", "auto"}
+            single_step_execute = mode in {"run", "auto"}
+
             print("\n  \033[1m📋 PROPOSED NEXT MOVES:\033[0m")
             for i, d in enumerate(decisions, 1):
                 print(f"\n  {i}. [{d.priority}] \033[96m{d.command[:110]}\033[0m")
@@ -880,11 +895,29 @@ class PenAIRepl:
                     print(f"     reason: {d.reasoning[:120]}")
                 if d.expected_outcome:
                     print(f"     goal:   {d.expected_outcome[:100]}")
+                if simulate and d.alternatives:
+                    print("     fallbacks:")
+                    for alt in d.alternatives[:3]:
+                        print(f"       - {str(alt)[:100]}")
+
             chain = await self.brain.plan_attack_chain()
             if chain:
                 print(f"\n  \033[1m  CHAINED ATTACK PATH:\033[0m")
                 for step in chain:
                     print(f"     → {step.get('step', '')[:110]}  ({step.get('goal', '')[:60]})")
+
+            if simulate:
+                insights = self.brain.get_insights()
+                if insights:
+                    print("\n  🧠 LESSONS APPLIED:")
+                    for insight in insights[:5]:
+                        print(f"     - {insight[:120]}")
+
+            if single_step_execute:
+                top = decisions[0]
+                print("\n  ▶ SAFE SINGLE-STEP EXECUTION")
+                print(f"  Running top decision only: {top.command}")
+                await self._cmd_run(top.command)
             print()
         except Exception as e:
             print(f"  Brain error: {e}")

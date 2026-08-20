@@ -344,6 +344,12 @@ class PenAIUI:
 [bold green]INFO:[/]
   dashboard              Show engagement dashboard
   suggest                Get attack suggestions
+  brain                  Show AI Brain status + learned lessons
+  think                  Suggest next safe moves
+  think simulate         Dry-run with fallbacks + lessons
+  think explain          Explain why the next moves make sense
+  think run              Execute only the top suggested move
+  think auto             Alias of think run (single step only)
   report                 Generate HTML + JSON report
   creds                  Show all discovered credentials
 

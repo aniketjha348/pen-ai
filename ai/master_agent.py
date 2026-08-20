@@ -4,6 +4,7 @@ import asyncio
 import json
 from typing import Any, Optional
 
+from ai.ai_brain import AIBrain
 from ai.planner import Planner, CandidateAction
 from ai.reasoner import Reasoner, Hypothesis
 from ai.memory import AIMemory
@@ -87,6 +88,7 @@ class MasterAgent:
         self.reasoner = Reasoner()
         self.memory = AIMemory()
         self.llm = llm_client
+        self.brain = AIBrain(llm=llm_client, target=(roe.allowed_networks[0] if roe.allowed_networks else ""))
 
         # Event tracking
         self._event_chain = EventChain()
@@ -266,6 +268,20 @@ class MasterAgent:
 
     def _build_state_summary(self) -> str:
         """Build a comprehensive state summary for LLM."""
+        self.brain.link_state(
+            [host.ip for host in self.state.hosts],
+            self._services_by_host(),
+            [
+                {
+                    "username": cred.username,
+                    "value": getattr(cred, "password", None) or getattr(cred, "hash_value", None) or "",
+                    "type": cred.credential_type,
+                }
+                for cred in self.state.credentials
+            ],
+            {self.state.current_host: self.state.current_access.value} if self.state.current_host else {},
+        )
+
         summary = f"""## Current Engagement State
 
 ### Network
@@ -311,6 +327,13 @@ class MasterAgent:
             for failure in self.state.failed_actions[-3:]:
                 summary += f"- {failure['action']}: {failure['reason']}\n"
 
+        # Add safe AI Brain context: learned lessons + likely next steps.
+        insights = self.brain.get_insights()
+        if insights:
+            summary += "\n### AI Brain Lessons\n"
+            for insight in insights[:5]:
+                summary += f"- {insight}\n"
+
         return summary
 
     def _format_hypotheses(self, hypotheses: list[Hypothesis]) -> str:
@@ -340,7 +363,34 @@ class MasterAgent:
             lines.append(f"   Tool: {action.tool_name or 'N/A'}")
             lines.append(f"   Reasoning: {action.reasoning}")
 
+        # Ask the brain for single-step safe suggestions to enrich the planner context.
+        try:
+            suggestions = self.brain._heuristic_decide()
+        except Exception:
+            suggestions = []
+        if suggestions:
+            lines.append("\n## AI Brain Suggested Safe Next Steps\n")
+            for i, suggestion in enumerate(suggestions[:3], 1):
+                lines.append(f"B{i}. {suggestion.command}")
+                if suggestion.reasoning:
+                    lines.append(f"    Why: {suggestion.reasoning}")
+
         return "\n".join(lines)
+
+    def _services_by_host(self) -> dict[str, list[dict[str, Any]]]:
+        """Group flat engagement services into brain-friendly host -> services mapping."""
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        host_map = {str(host.id): host.ip for host in self.state.hosts}
+        for service in self.state.services:
+            host_ip = host_map.get(str(service.host_id), self.state.current_host or "unknown")
+            grouped.setdefault(host_ip, []).append(
+                {
+                    "port": service.port,
+                    "service": service.service_name or "unknown",
+                    "version": service.version or "",
+                }
+            )
+        return grouped
 
     async def _execute_action(self, action: CandidateAction) -> dict[str, Any]:
         """Execute an action using the appropriate tool."""

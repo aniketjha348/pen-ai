@@ -106,17 +106,27 @@ class TestMasterAgentLLM:
     def test_create_agent_without_llm(self):
         agent = MasterAgent(state=self.state, roe=self.roe)
         assert agent.llm is None
+        assert agent.brain is not None
 
     def test_create_agent_with_llm(self):
         llm = LLMClient(api_key="test", model="test")
         agent = MasterAgent(state=self.state, roe=self.roe, llm_client=llm)
         assert agent.llm is not None
+        assert agent.brain.llm is llm
 
     def test_build_state_summary(self):
         agent = MasterAgent(state=self.state, roe=self.roe)
         summary = agent._build_state_summary()
         assert "Hosts Discovered" in summary
         assert "Current Access Level" in summary
+
+    def test_build_state_summary_includes_brain_lessons(self, tmp_path):
+        agent = MasterAgent(state=self.state, roe=self.roe)
+        agent.brain.memory = agent.brain.memory.__class__(target="192.168.1.0_24", memory_dir=tmp_path)
+        agent.brain.memory.record("nmap -sV 192.168.1.10", success=True, reasoning="found web")
+        summary = agent._build_state_summary()
+        assert "AI Brain Lessons" in summary
+        assert "nmap -sV 192.168.1.10" in summary
 
     def test_format_hypotheses(self):
         from ai.reasoner import Hypothesis, HypothesisConfidence
@@ -146,6 +156,22 @@ class TestMasterAgentLLM:
         formatted = agent._format_actions(actions)
         assert "test_action" in formatted
         assert "nmap_host_scan" in formatted
+
+    def test_format_actions_includes_brain_suggestions(self):
+        from ai.planner import CandidateAction, ActionType, ActionPriority
+
+        agent = MasterAgent(state=self.state, roe=self.roe)
+        actions = [
+            CandidateAction(
+                name="test_action",
+                action_type=ActionType.RECON,
+                description="Test action",
+                priority=ActionPriority.HIGH,
+                tool_name="nmap_host_scan",
+            )
+        ]
+        formatted = agent._format_actions(actions)
+        assert "AI Brain Suggested Safe Next Steps" in formatted
 
 
 class TestOrchestratorWithLLM:
