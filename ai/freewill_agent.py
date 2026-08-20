@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Optional
 
 from ai.autonomous_executor import AutonomousExecutor, CommandResult
+from ai.ai_brain import AIBrain
 from ai.brain import AttackSurface
 from ai.credential_manager import CredentialManager
 from reporting.html_report import HTMLReportGenerator
@@ -50,6 +51,7 @@ class FreewillAgent:
         self.executor = AutonomousExecutor(timeout=300)
         self.cred_manager = CredentialManager()
         self.llm = llm_client
+        self.brain = AIBrain(llm=llm_client)
 
         # Enterprise modules
         self.zeroday = ZeroDayFingerprint(self.executor) if HAS_ENTERPRISE else None
@@ -86,6 +88,19 @@ class FreewillAgent:
             "findings": len(self.findings),
             "commands_run": len(self.commands_run),
         }, indent=2, default=str)
+
+        # AI Brain continuous-learning context
+        brain_context = ""
+        if self.brain is not None:
+            try:
+                self.brain.link_state(self.hosts, self.services, self.credentials, self.access_map)
+                lessons = self.brain.get_insights()
+                if lessons:
+                    brain_context = "\nREMEMBERED LESSONS FROM PREVIOUS ACTIONS:\n" + "\n".join(
+                        f"- {l}" for l in lessons
+                    ) + "\n"
+            except Exception:
+                brain_context = ""
 
         enterprise_context = ""
         if HAS_ENTERPRISE:
@@ -163,6 +178,7 @@ IMPORTANT RULES:
 - For web: check SQLi, XSS, LFI, RFI, command injection, file upload
 - For unknown services: fingerprint them, research CVEs, try exploits
 - Remember: the goal is to find as many vulnerabilities as possible
+{brain_context}
 """
 
     def get_analysis_prompt(self, command: str, output: str, exit_code: int) -> str:
@@ -479,6 +495,7 @@ CONFIDENCE: medium"""
         self.target = target
         self.scope = scope or target
         self.start_time = datetime.now()
+        self.brain.set_target(target)
 
         print(f"\n{'='*60}")
         print(f"  🎯 PEN-AI FREEWILL AGENT")
@@ -588,6 +605,28 @@ CONFIDENCE: medium"""
             if len(self.memory) > self.max_memory:
                 self.memory = self.memory[-self.max_memory:]
 
+            # 9. AI BRAIN - learn from this output + adapt on failure
+            if self.brain is not None:
+                try:
+                    self.brain.link_state(self.hosts, self.services, self.credentials, self.access_map)
+                    brain_analysis = await self.brain.analyze_output(
+                        parsed['next_command'], output, result.exit_code
+                    )
+                    if brain_analysis.findings:
+                        for finding in brain_analysis.findings:
+                            print(
+                                f"  [🧠 AI BRAIN] Finding [{finding.severity}] {finding.title[:80]}"
+                            )
+                    if result.exit_code != 0:
+                        print("  [🧠 AI BRAIN] Attempt failed - computing alternative techniques...")
+                        alternatives = await self.brain.suggest_alternatives(
+                            parsed['next_command'], output
+                        )
+                        for alt in alternatives[:3]:
+                            print(f"    → {alt[:110]}")
+                except Exception:
+                    pass
+
         # Final report
         self._print_final_report()
 
@@ -608,6 +647,16 @@ CONFIDENCE: medium"""
         print(f"  Networks: {len(self.pivoted)}")
         print(f"  Vulnerabilities: {len(self.vulns)}")
         print(f"{'='*60}")
+
+        # AI Brain learning summary
+        if self.brain is not None:
+            try:
+                print("\n  🧠 AI BRAIN LESSONS:")
+                for insight in self.brain.get_insights()[:8]:
+                    print(f"    {insight}")
+                print(f"{'='*60}")
+            except Exception:
+                pass
 
         if self.hosts:
             print(f"\n  HOSTS:")

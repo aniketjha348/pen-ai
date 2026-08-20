@@ -22,6 +22,7 @@ from datetime import datetime
 from typing import Optional
 
 from ai.autonomous_executor import AutonomousExecutor
+from ai.ai_brain import AIBrain
 from ai.brain import AttackSurface, DecisionEngine
 from ai.streaming import StreamPrinter
 from ai.context_compressor import ContextCompressor
@@ -53,6 +54,7 @@ class PenAIRepl:
         self.cred_manager = CredentialManager()
         self.session_replay = SessionReplay()
         self.llm = llm
+        self.brain = AIBrain(llm=llm, target="")
 
         # State
         self.target = ""
@@ -140,6 +142,7 @@ class PenAIRepl:
                         print(f"  \033[91m✗ {msg}\033[0m")
                         continue
                     self.target = target
+                    self.brain.set_target(target)
                     print(f"  \033[92m✓ Target set: {self.target}\033[0m")
                     print(f"  \033[90mAuto-scanning target...\033[0m")
                     await self._cmd_scan(self.target)
@@ -153,6 +156,10 @@ class PenAIRepl:
                     await self._cmd_attack(user_input[7:].strip())
                 elif user_input.lower() == "suggest":
                     self._cmd_suggest()
+                elif user_input.lower() == "brain":
+                    self._cmd_brain()
+                elif user_input.lower() == "think":
+                    await self._cmd_think()
                 elif user_input.lower().startswith("run "):
                     await self._cmd_run(user_input[4:].strip())
                 elif user_input.lower() == "install":
@@ -234,6 +241,7 @@ class PenAIRepl:
 
     async def _cmd_scan(self, target: str):
         self.target = target
+        self.brain.set_target(target)
         print(f"\n  \033[96m🔍 Scanning {target}...\033[0m\n")
 
         print("  \033[90m[1/3]\033[0m Host discovery...")
@@ -838,6 +846,49 @@ class PenAIRepl:
             for cmd in commands:
                 print(f"    -> \033[96m{cmd[:80]}\033[0m")
 
+    def _cmd_brain(self):
+        """Show AI Brain status + learning view (continuous learning)."""
+        self.brain.link_state(
+            self.hosts or list(self.services.keys()), self.services, self.credentials, self.access_map
+        )
+        print(f"\n  {self.brain.print_status()}")
+        insights = self.brain.get_insights()
+        if insights:
+            print("\n  🧠 RECENT LESSONS:")
+            for i in insights:
+                print(f"    {i}")
+        print()
+
+    async def _cmd_think(self):
+        """Let the AI Brain decide the next moves based on current state."""
+        if not self.target:
+            print("  No target set. Use: set target <ip>")
+            return
+        self.brain.link_state(
+            self.hosts or list(self.services.keys()), self.services, self.credentials, self.access_map
+        )
+        print("\n  🧠 AI BRAIN THINKING...")
+        try:
+            decisions = await self.brain.decide_next()
+            if not decisions:
+                print("  No decisions produced.")
+                return
+            print("\n  \033[1m📋 PROPOSED NEXT MOVES:\033[0m")
+            for i, d in enumerate(decisions, 1):
+                print(f"\n  {i}. [{d.priority}] \033[96m{d.command[:110]}\033[0m")
+                if d.reasoning:
+                    print(f"     reason: {d.reasoning[:120]}")
+                if d.expected_outcome:
+                    print(f"     goal:   {d.expected_outcome[:100]}")
+            chain = await self.brain.plan_attack_chain()
+            if chain:
+                print(f"\n  \033[1m  CHAINED ATTACK PATH:\033[0m")
+                for step in chain:
+                    print(f"     → {step.get('step', '')[:110]}  ({step.get('goal', '')[:60]})")
+            print()
+        except Exception as e:
+            print(f"  Brain error: {e}")
+
     async def _cmd_attack(self, target: str):
         if ":" in target:
             host, port = target.split(":", 1)
@@ -951,6 +1002,7 @@ class PenAIRepl:
         state = self.session_mgr.load(session_id)
         if state:
             self.target = state.get("target", "")
+            self.brain.set_target(self.target)
             self.hosts = state.get("known_hosts", [])
             self.services = state.get("known_services", {})
             self.credentials = state.get("credentials", [])

@@ -715,3 +715,148 @@ async def web_jwt_analyze(token: str) -> dict:
     """Analyze JWT token."""
     agent = WebAgent()
     return await agent.analyze_jwt(token)
+# ─────────────────────────────────────────────────────────────────────────────
+# Bug-bounty depth tools (wired to exploitation.modules.web_vulns)
+# ─────────────────────────────────────────────────────────────────────────────
+@register_tool(
+    name="web_graphql_test",
+    description="Test GraphQL endpoints for introspection and injection",
+    category=ToolCategory.WEB,
+    parameters=[
+        ToolParameter(name="target", type="str", description="Target URL or IP"),
+        ToolParameter(name="port", type="int", description="Port number (default 443)", required=False, default=443),
+    ],
+)
+async def web_graphql_test(target: str, port: int = 443) -> dict:
+    """Test GraphQL injection."""
+    from exploitation.modules.web_vulns import GraphQLInjectionTest
+
+    module = GraphQLInjectionTest()
+    result = await module.run(target, port)
+    return {"success": result.success, "evidence": result.evidence, "output": result.output}
+
+
+@register_tool(
+    name="web_csrf_check",
+    description="Check web forms for CSRF protections",
+    category=ToolCategory.WEB,
+    parameters=[
+        ToolParameter(name="target", type="str", description="Target URL or IP"),
+        ToolParameter(name="port", type="int", description="Port number", required=False, default=80),
+    ],
+)
+async def web_csrf_check(target: str, port: int = 80) -> dict:
+    """Detect CSRF weaknesses."""
+    from exploitation.modules.web_vulns import CSRFDetectionTest
+
+    module = CSRFDetectionTest()
+    result = await module.run(target, port)
+    return {"success": result.success, "evidence": result.evidence, "output": result.output}
+
+
+@register_tool(
+    name="web_upload_test",
+    description="Probe file upload endpoints for weak restrictions",
+    category=ToolCategory.WEB,
+    parameters=[
+        ToolParameter(name="target", type="str", description="Target URL or IP"),
+        ToolParameter(name="port", type="int", description="Port number", required=False, default=80),
+    ],
+)
+async def web_upload_test(target: str, port: int = 80) -> dict:
+    """Test file upload restrictions."""
+    from exploitation.modules.web_vulns import FileUploadTest
+
+    module = FileUploadTest()
+    result = await module.run(target, port)
+    return {"success": result.success, "evidence": result.evidence, "output": result.output}
+
+
+@register_tool(
+    name="web_business_logic_test",
+    description="Find endpoints to probe business-logic flaws",
+    category=ToolCategory.WEB,
+    parameters=[
+        ToolParameter(name="target", type="str", description="Target URL or IP"),
+        ToolParameter(name="port", type="int", description="Port number", required=False, default=80),
+    ],
+)
+async def web_business_logic_test(target: str, port: int = 80) -> dict:
+    """Hunt for business-logic surface."""
+    from exploitation.modules.web_vulns import BusinessLogicTest
+
+    module = BusinessLogicTest()
+    result = await module.run(target, port)
+    return {"success": result.success, "evidence": result.evidence, "output": result.output}
+
+
+@register_tool(
+    name="web_ssrf_test",
+    description="Test URL parameters for SSRF",
+    category=ToolCategory.WEB,
+    parameters=[
+        ToolParameter(name="target", type="str", description="Target URL or IP"),
+        ToolParameter(name="port", type="int", description="Port number", required=False, default=80),
+    ],
+)
+async def web_ssrf_test(target: str, port: int = 80) -> dict:
+    """Detect SSRF."""
+    from exploitation.modules.web_vulns import SSRFDetectionTest
+
+    module = SSRFDetectionTest()
+    result = await module.run(target, port)
+    return {"success": result.success, "evidence": result.evidence, "output": result.output}
+
+
+@register_tool(
+    name="web_idor_test",
+    description="Enumerate sequential object IDs for IDOR",
+    category=ToolCategory.WEB,
+    parameters=[
+        ToolParameter(name="target", type="str", description="Target URL or IP"),
+        ToolParameter(name="port", type="int", description="Port number", required=False, default=80),
+    ],
+)
+async def web_idor_test(target: str, port: int = 80) -> dict:
+    """Probe IDOR candidates."""
+    from exploitation.modules.web_vulns import IDORTest
+
+    module = IDORTest()
+    result = await module.run(target, port)
+    return {"success": result.success, "evidence": result.evidence, "output": result.output}
+
+
+@register_tool(
+    name="web_open_redirect_test",
+    description="Test redirect parameters for open redirects",
+    category=ToolCategory.WEB,
+    parameters=[
+        ToolParameter(name="target", type="str", description="Target URL or IP"),
+        ToolParameter(name="port", type="int", description="Port number", required=False, default=80),
+    ],
+)
+async def web_open_redirect_test(target: str, port: int = 80) -> dict:
+    """Probe open redirects."""
+    from exploitation.modules.web_vulns import OpenRedirectTest
+
+    module = OpenRedirectTest()
+    result = await module.run(target, port)
+    return {"success": result.success, "evidence": result.evidence, "output": result.output}
+
+
+@register_tool(
+    name="web_ssti_test",
+    description="Test parameters for server-side template injection",
+    category=ToolCategory.WEB,
+    parameters=[
+        ToolParameter(name="target", type="str", description="Target URL or IP"),
+        ToolParameter(name="port", type="int", description="Port number", required=False, default=80),
+    ],
+)
+async def web_ssti_test(target: str, port: int = 80) -> dict:
+    """Probe SSTI."""
+    from exploitation.modules.web_vulns import SSTITest
+
+    module = SSTITest()
+    result = await module.run(target, port)
+    return {"success": result.success, "evidence": result.evidence, "output": result.output}
