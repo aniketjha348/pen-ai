@@ -54,6 +54,34 @@ pen-ai 10.10.10.0/24
 pen-ai bugbounty https://example.com
 ```
 
+### Safe AI Brain REPL Modes
+
+The interactive REPL now includes **safe, analyst-guided AI Brain workflows**.
+These modes are designed to help with reasoning and single-step execution
+without enabling unattended autonomous loops.
+
+```bash
+# Show brain status + learned lessons
+brain
+
+# Suggest the next safe moves
+think
+
+# Dry-run with fallbacks + lessons applied
+think simulate
+
+# Explain why the suggested moves make sense
+think explain
+
+# Execute only the top suggested move (single safe step)
+think run
+
+# Alias of think run (still single-step only)
+think auto
+```
+
+Use these inside the interactive REPL after starting `pen-ai`.
+
 ---
 
 ## 23 CLI Commands
